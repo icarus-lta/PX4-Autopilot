@@ -28,6 +28,20 @@ param set-default SIM_GZ_EC_MIN2 0
 param set-default SIM_GZ_EC_MAX1 300
 param set-default SIM_GZ_EC_MAX2 300
 
+# Map PX4 servo outputs to the tilt pods (bridge topic
+# /model/<model>/servo_{0,1}, radians into the joint position
+# controllers). The angle map is declared in DEGREES and spans the
+# full output range: value -1..+1 -> -180..+180 deg, so 0 = thrust
+# forward, +0.5 = +90 (up), +-1 = reverse. The +-180 range is the
+# spec-pending placeholder; tighten MINA/MAXA when the vehicle's
+# tilt limits arrive. Servo 1 = starboard pod, servo 2 = port pod.
+param set-default SIM_GZ_SV_FUNC1 201
+param set-default SIM_GZ_SV_FUNC2 202
+param set-default SIM_GZ_SV_MINA1 -180
+param set-default SIM_GZ_SV_MAXA1 180
+param set-default SIM_GZ_SV_MINA2 -180
+param set-default SIM_GZ_SV_MAXA2 180
+
 # Control allocation: two fixed forward thrusters on a transverse rod
 # through the center of mass (fixed-tilt increment of the vectored
 # side-propulsion configuration - per-thruster tilt actuation is a
