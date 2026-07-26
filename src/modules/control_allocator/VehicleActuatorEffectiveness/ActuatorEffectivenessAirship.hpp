@@ -33,15 +33,45 @@
 
 #pragma once
 
-#include "ActuatorEffectivenessCustom.hpp"
+#include "control_allocation/actuator_effectiveness/ActuatorEffectiveness.hpp"
 
-class ActuatorEffectivenessAirship : public ActuatorEffectivenessCustom
+#include <px4_platform_common/module_params.h>
+
+class ActuatorEffectivenessAirship : public ModuleParams, public ActuatorEffectiveness
 {
 public:
-	ActuatorEffectivenessAirship(ModuleParams *parent) : ActuatorEffectivenessCustom(parent) {}
+	ActuatorEffectivenessAirship(ModuleParams *parent) : ModuleParams(parent) {}
 	virtual ~ActuatorEffectivenessAirship() = default;
 
 	bool getEffectivenessMatrix(Configuration &configuration, EffectivenessUpdateReason external_update) override;
 
+	void updateSetpoint(const matrix::Vector<float, NUM_AXES> &control_sp, int matrix_index,
+			    ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
+			    const ActuatorVector &actuator_max) override;
+
+	void getUnallocatedControl(int matrix_index, control_allocator_status_s &status) override;
+
 	const char *name() const override { return "Airship"; }
+
+private:
+	struct SaturationFlags {
+		bool roll_pos;
+		bool roll_neg;
+		bool yaw_pos;
+		bool yaw_neg;
+		bool thrust_x_pos;
+		bool thrust_x_neg;
+		bool thrust_z_pos;
+		bool thrust_z_neg;
+	};
+	static void setSaturationFlag(float coeff, bool &positive_flag, bool &negative_flag);
+
+	SaturationFlags _saturation_flags{};
+
+	float _tilt[2] {}; ///< last commanded tilt [rad], held through zero-thrust
+
+	DEFINE_PARAMETERS(
+		(ParamFloat<px4::params::CA_AIRSHIP_TLMIN>) _param_ca_airship_tlmin,
+		(ParamFloat<px4::params::CA_AIRSHIP_TLMAX>) _param_ca_airship_tlmax
+	)
 };
