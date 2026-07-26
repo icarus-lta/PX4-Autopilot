@@ -37,6 +37,32 @@ parameters:
                 16: Airship
             default: 0
 
+        CA_AIRSHIP_TLMIN:
+            description:
+                short: Airship tilt angle at minimum servo output
+                long: |
+                  Pod tilt angle when the tilt servo output is at its minimum.
+                  Zero is thrust forward, positive tilts the thrust up.
+            type: float
+            decimal: 0
+            unit: 'deg'
+            min: -180.0
+            max: 0.0
+            default: -180.0
+
+        CA_AIRSHIP_TLMAX:
+            description:
+                short: Airship tilt angle at maximum servo output
+                long: |
+                  Pod tilt angle when the tilt servo output is at its maximum.
+                  Zero is thrust forward, positive tilts the thrust up.
+            type: float
+            decimal: 0
+            unit: 'deg'
+            min: 0.0
+            max: 180.0
+            default: 180.0
+
         CA_METHOD:
             description:
                 short: Control allocation method
