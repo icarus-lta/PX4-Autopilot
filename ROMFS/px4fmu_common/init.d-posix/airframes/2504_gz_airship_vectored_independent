@@ -1,18 +1,23 @@
 #!/bin/sh
 #
-# @name Gazebo airship
+# @name Generic Airship (Independent Vectoring)
 #
 # @type Airship
 # @class Airship
 #
 # @maintainer Hyunduk Shin <hyunduk@icarus-airship.com>
 #
+# @output Motor1 starboard pod motor
+# @output Motor2 port pod motor
+# @output Servo1 starboard pod tilt
+# @output Servo2 port pod tilt
+#
 
 . ${R}etc/init.d/rc.airship_defaults
 
 PX4_SIMULATOR=${PX4_SIMULATOR:=gz}
 PX4_GZ_WORLD=${PX4_GZ_WORLD:=lta}
-PX4_SIM_MODEL=${PX4_SIM_MODEL:=airship}
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=airship_vectored_independent}
 
 # Simulation only: allow arming without a GCS connection
 param set-default NAV_DLL_ACT 0
@@ -36,7 +41,7 @@ param set-default SIM_GZ_SV_MAXA1 180
 param set-default SIM_GZ_SV_MINA2 -180
 param set-default SIM_GZ_SV_MAXA2 180
 
-# Airship allocation, vectored side pods: normalized demands map exactly
+# Airship allocation, independently vectored side pods: normalized demands map exactly
 # onto per-pod thrust and tilt (full yaw = the 0/180 deg couple); the
 # physical scaling lives in the SIM_GZ output mapping above.
 param set-default CA_AIRFRAME 16
