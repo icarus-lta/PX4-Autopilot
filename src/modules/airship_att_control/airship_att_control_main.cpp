@@ -89,7 +89,7 @@ void AirshipAttitudeControl::publishTorqueSetpoint(const hrt_abstime &timestamp_
 
 	// zero actuators unless armed and in a manual flight mode
 	if (_vehicle_control_mode.flag_armed && _vehicle_control_mode.flag_control_manual_enabled) {
-		v_torque_sp.xyz[0] = 0.f;
+		v_torque_sp.xyz[0] = _manual_control_setpoint.roll;
 		v_torque_sp.xyz[1] = _manual_control_setpoint.pitch;
 		v_torque_sp.xyz[2] = _manual_control_setpoint.yaw;
 	}
@@ -106,6 +106,9 @@ void AirshipAttitudeControl::publishThrustSetpoint(const hrt_abstime &timestamp_
 	// zero actuators unless armed and in a manual flight mode
 	if (_vehicle_control_mode.flag_armed && _vehicle_control_mode.flag_control_manual_enabled) {
 		v_thrust_sp.xyz[0] = (_manual_control_setpoint.throttle + 1.f) * .5f;
+		// Stick forward descends: pitch drives the elevators on finned
+		// airships and vertical thrust on vectored ones.
+		v_thrust_sp.xyz[2] = _manual_control_setpoint.pitch;
 	}
 
 	_vehicle_thrust_setpoint_pub.publish(v_thrust_sp);
