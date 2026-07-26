@@ -36,18 +36,7 @@ param set-default SIM_GZ_SV_MAXA1 180
 param set-default SIM_GZ_SV_MINA2 -180
 param set-default SIM_GZ_SV_MAXA2 180
 
-# Fixed-tilt allocation: collective thrust = Fx, differential = yaw.
-# Pitch and roll are passively stable (buoyancy righting) and not
-# allocated; tilt allocation arrives with the vectoring effectiveness.
-param set-default CA_AIRFRAME 9
-param set-default CA_ROTOR_COUNT 2
-param set-default CA_ROTOR0_AX 1
-param set-default CA_ROTOR0_AZ 0
-param set-default CA_ROTOR0_KM 0
-param set-default CA_ROTOR0_PY 1.5
-param set-default CA_ROTOR0_CT 18
-param set-default CA_ROTOR1_AX 1
-param set-default CA_ROTOR1_AZ 0
-param set-default CA_ROTOR1_KM 0
-param set-default CA_ROTOR1_PY -1.5
-param set-default CA_ROTOR1_CT 18
+# Airship allocation, vectored side pods: normalized demands map exactly
+# onto per-pod thrust and tilt (full yaw = the 0/180 deg couple); the
+# physical scaling lives in the SIM_GZ output mapping above.
+param set-default CA_AIRFRAME 16
