@@ -57,6 +57,8 @@ private:
 	struct SaturationFlags {
 		bool roll_pos;
 		bool roll_neg;
+		bool pitch_pos;
+		bool pitch_neg;
 		bool yaw_pos;
 		bool yaw_neg;
 		bool thrust_x_pos;
@@ -72,6 +74,7 @@ private:
 
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::CA_AIRSHIP_TLMIN>) _param_ca_airship_tlmin,
-		(ParamFloat<px4::params::CA_AIRSHIP_TLMAX>) _param_ca_airship_tlmax
+		(ParamFloat<px4::params::CA_AIRSHIP_TLMAX>) _param_ca_airship_tlmax,
+		(ParamInt<px4::params::CA_AIRSHIP_GRP>) _param_ca_airship_grp
 	)
 };

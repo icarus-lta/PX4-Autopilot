@@ -75,12 +75,22 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	const float tilt_min = math::radians(_param_ca_airship_tlmin.get());
 	const float tilt_max = math::radians(_param_ca_airship_tlmax.get());
 	const float tilt_span = tilt_max - tilt_min;
+	const bool independent = _param_ca_airship_grp.get() > 0;
 
-	// Exact per-pod force decomposition (0 = starboard, 1 = port): the forward
-	// components differ by the yaw demand, the vertical components by the roll
-	// demand.
-	const float fx[2] = {thrust_forward - yaw, thrust_forward + yaw};
-	const float fz[2] = {thrust_up - roll, thrust_up + roll};
+	// Exact per-pod force decomposition (0 = starboard, 1 = port): yaw and
+	// roll split the forward and vertical demands between the pods;
+	// collective thrust follows the combined demand alone.
+	float fx[2] = {thrust_forward - yaw, thrust_forward + yaw};
+	float fz[2] = {thrust_up - roll, thrust_up + roll};
+
+	if (!independent) {
+		fx[0] = fx[1] = thrust_forward;
+		fz[0] = fz[1] = thrust_up;
+	}
+
+	float thrust[2];
+	float cos_tilt[2];
+	float sin_tilt[2];
 
 	for (int i = 0; i < 2; i++) {
 		const float magnitude = sqrtf(fx[i] * fx[i] + fz[i] * fz[i]);
@@ -90,9 +100,8 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		if (magnitude > 1e-3f) {
 			float tilt = atan2f(fz[i], fx[i]);
 
-			// The 180 deg reverse direction is sign-ambiguous around zero
-			// vertical demand (negative zero yields -pi): prefer tilting
-			// up, through the range maximum.
+			// atan2 of negative zero yields -pi: prefer the +180 deg
+			// reverse so the tilt goes up, through the range maximum.
 			if (fabsf(fz[i]) < FLT_EPSILON && fx[i] < 0.f) {
 				tilt = M_PI_F;
 			}
@@ -100,19 +109,37 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 			_tilt[i] = math::constrain(tilt, tilt_min, tilt_max);
 		}
 
-		if (magnitude > 1.f) {
-			// Attribute the saturation to the demands by the sign of their
-			// gradient on this pod's thrust magnitude.
-			const float side = (i == 0) ? -1.f : 1.f;
-			setSaturationFlag(fx[i], _saturation_flags.thrust_x_pos, _saturation_flags.thrust_x_neg);
-			setSaturationFlag(-fz[i], _saturation_flags.thrust_z_pos, _saturation_flags.thrust_z_neg);
-			setSaturationFlag(side * fx[i], _saturation_flags.yaw_pos, _saturation_flags.yaw_neg);
-			setSaturationFlag(side * fz[i], _saturation_flags.roll_pos, _saturation_flags.roll_neg);
-		}
+		cos_tilt[i] = cosf(_tilt[i]);
+		sin_tilt[i] = sinf(_tilt[i]);
 
-		actuator_sp(i) = math::min(magnitude, 1.f);
-		actuator_sp(2 + i) = (tilt_span > FLT_EPSILON) ? (-1.f + 2.f * (_tilt[i] - tilt_min) / tilt_span) : 0.f;
+		// Project the demand onto the realized tilt: the feasible
+		// component when the tilt is clamped or fixed.
+		thrust[i] = fx[i] * cos_tilt[i] + fz[i] * sin_tilt[i];
 	}
+
+	for (int i = 0; i < 2; i++) {
+		// The propellers are non-reversible: reverse thrust is reached by
+		// tilting, never by a negative motor command.
+		actuator_sp(i) = math::constrain(thrust[i], math::max(actuator_min(i), 0.f), actuator_max(i));
+
+		const float tilt_sp = (tilt_span > FLT_EPSILON) ? (-1.f + 2.f * (_tilt[i] - tilt_min) / tilt_span) : 0.f;
+		actuator_sp(2 + i) = math::constrain(tilt_sp, actuator_min(2 + i), actuator_max(2 + i));
+	}
+
+	// Report the demand left unmet on each axis by the achieved wrench.
+	const float achieved_x[2] = {actuator_sp(0) *cos_tilt[0], actuator_sp(1) *cos_tilt[1]};
+	const float achieved_z[2] = {actuator_sp(0) *sin_tilt[0], actuator_sp(1) *sin_tilt[1]};
+
+	setSaturationFlag(thrust_forward - 0.5f * (achieved_x[0] + achieved_x[1]),
+			  _saturation_flags.thrust_x_pos, _saturation_flags.thrust_x_neg);
+	setSaturationFlag(-(thrust_up - 0.5f * (achieved_z[0] + achieved_z[1])),
+			  _saturation_flags.thrust_z_pos, _saturation_flags.thrust_z_neg);
+	setSaturationFlag(yaw - 0.5f * (achieved_x[1] - achieved_x[0]),
+			  _saturation_flags.yaw_pos, _saturation_flags.yaw_neg);
+	setSaturationFlag(roll - 0.5f * (achieved_z[1] - achieved_z[0]),
+			  _saturation_flags.roll_pos, _saturation_flags.roll_neg);
+	// The pods produce no pitch torque
+	setSaturationFlag(control_sp(ControlAxis::PITCH), _saturation_flags.pitch_pos, _saturation_flags.pitch_neg);
 }
 
 void
@@ -142,7 +169,15 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 		status.unallocated_torque[0] = 0.f;
 	}
 
-	status.unallocated_torque[1] = 0.f;
+	if (_saturation_flags.pitch_pos) {
+		status.unallocated_torque[1] = 1.f;
+
+	} else if (_saturation_flags.pitch_neg) {
+		status.unallocated_torque[1] = -1.f;
+
+	} else {
+		status.unallocated_torque[1] = 0.f;
+	}
 
 	if (_saturation_flags.yaw_pos) {
 		status.unallocated_torque[2] = 1.f;

@@ -22,8 +22,7 @@ PX4_SIM_MODEL=${PX4_SIM_MODEL:=airship_vectored_independent}
 # Simulation only: allow arming without a GCS connection
 param set-default NAV_DLL_ACT 0
 
-# Motor outputs to the gz motor plugins: channel 1 = starboard, 2 = port;
-# output 0..1 maps to rotor velocity 0..300 rad/s (thrust 18*u^2 N).
+# gz motors: 1 = starboard, 2 = port; output 0..1 = rotor speed 0..300 rad/s
 param set-default SIM_GZ_EC_FUNC1 101
 param set-default SIM_GZ_EC_FUNC2 102
 param set-default SIM_GZ_EC_MIN1 0
@@ -31,9 +30,8 @@ param set-default SIM_GZ_EC_MIN2 0
 param set-default SIM_GZ_EC_MAX1 300
 param set-default SIM_GZ_EC_MAX2 300
 
-# Tilt pods on servo outputs 1 (starboard) and 2 (port); -1..1 spans
-# -180..+180 deg (0 = forward, +0.5 = up). Placeholder range pending the
-# vehicle specification.
+# Tilt servos: 1 = starboard, 2 = port; the angle range is a placeholder
+# pending the vehicle specification
 param set-default SIM_GZ_SV_FUNC1 201
 param set-default SIM_GZ_SV_FUNC2 202
 param set-default SIM_GZ_SV_MINA1 -180
@@ -41,7 +39,8 @@ param set-default SIM_GZ_SV_MAXA1 180
 param set-default SIM_GZ_SV_MINA2 -180
 param set-default SIM_GZ_SV_MAXA2 180
 
-# Airship allocation, independently vectored side pods: normalized demands map exactly
-# onto per-pod thrust and tilt (full yaw = the 0/180 deg couple); the
-# physical scaling lives in the SIM_GZ output mapping above.
+# Independently vectored side pods; full yaw commands the 0/180 deg couple
 param set-default CA_AIRFRAME 16
+param set-default CA_AIRSHIP_GRP 1
+param set-default CA_AIRSHIP_TLMIN -180
+param set-default CA_AIRSHIP_TLMAX 180
