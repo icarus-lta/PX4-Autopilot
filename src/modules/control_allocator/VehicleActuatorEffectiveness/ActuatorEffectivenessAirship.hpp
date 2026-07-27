@@ -34,13 +34,14 @@
 #pragma once
 
 #include "control_allocation/actuator_effectiveness/ActuatorEffectiveness.hpp"
+#include "ActuatorEffectivenessControlSurfaces.hpp"
 
 #include <px4_platform_common/module_params.h>
 
 class ActuatorEffectivenessAirship : public ModuleParams, public ActuatorEffectiveness
 {
 public:
-	ActuatorEffectivenessAirship(ModuleParams *parent) : ModuleParams(parent) {}
+	ActuatorEffectivenessAirship(ModuleParams *parent) : ModuleParams(parent), _control_surfaces(this) {}
 	virtual ~ActuatorEffectivenessAirship() = default;
 
 	bool getEffectivenessMatrix(Configuration &configuration, EffectivenessUpdateReason external_update) override;
@@ -72,10 +73,23 @@ private:
 
 	float _tilt[2] {}; ///< last commanded tilt [rad], held through zero-thrust
 
+	ActuatorEffectivenessControlSurfaces _control_surfaces;
+
+	// Actuator layout, decided when the actuators are declared
+	int _first_control_surface_idx{0};
+	int _first_tilt_idx{2};
+	int _tilt_count{0};
+	bool _has_tail{false};
+	bool _independent{false};
+
+	bool _surface_serves[3] {};	///< torque axes with control-surface effectiveness
+	float _achieved_roll{0.f};
+	float _achieved_yaw{0.f};
+
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::CA_AIRSHIP_TLMIN>) _param_ca_airship_tlmin,
 		(ParamFloat<px4::params::CA_AIRSHIP_TLMAX>) _param_ca_airship_tlmax,
 		(ParamInt<px4::params::CA_AIRSHIP_GRP>) _param_ca_airship_grp,
-		(ParamBool<px4::params::CA_AIRSHIP_AUX>) _param_ca_airship_aux
+		(ParamBool<px4::params::CA_AIRSHIP_TAIL>) _param_ca_airship_tail
 	)
 };

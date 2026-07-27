@@ -42,10 +42,19 @@ static constexpr int MOTOR_PORT = 1;
 static constexpr int TILT_STARBOARD = 2;
 static constexpr int TILT_PORT = 3;
 
-// With the tail thruster (CA_AIRSHIP_AUX) the tilts shift by one
+// With the tail thruster (CA_AIRSHIP_TAIL) the tilts shift by one
 static constexpr int MOTOR_TAIL = 2;
-static constexpr int AUX_TILT_STARBOARD = 3;
-static constexpr int AUX_TILT_PORT = 4;
+static constexpr int TAIL_TILT_STARBOARD = 3;
+static constexpr int TAIL_TILT_PORT = 4;
+
+// Surfaces declared by setSurfaces() follow the tilts
+static constexpr int SURFACE_ELEVATOR = 4;
+static constexpr int SURFACE_RUDDER = 5;
+
+// Collective grouping registers a single tilt servo
+static constexpr int COLLECTIVE_TILT = 2;
+static constexpr int TAIL_COLLECTIVE_TILT = 3;
+static constexpr int TAIL_COLLECTIVE_RUDDER = 5;
 
 static void setTiltRange(float tilt_min_deg = -180.f, float tilt_max_deg = 180.f)
 {
@@ -54,16 +63,18 @@ static void setTiltRange(float tilt_min_deg = -180.f, float tilt_max_deg = 180.f
 
 	int32_t grouping = 1;
 	param_set(param_find("CA_AIRSHIP_GRP"), &grouping);
-	int32_t aux = 0;
-	param_set(param_find("CA_AIRSHIP_AUX"), &aux);
+	int32_t tail = 0;
+	param_set(param_find("CA_AIRSHIP_TAIL"), &tail);
 	param_set(param_find("CA_AIRSHIP_TLMIN"), &tilt_min_deg);
 	param_set(param_find("CA_AIRSHIP_TLMAX"), &tilt_max_deg);
+	int32_t surface_count = 0;
+	param_set(param_find("CA_SV_CS_COUNT"), &surface_count);
 }
 
-static void setAuxThruster()
+static void setTailThruster()
 {
-	int32_t aux = 1;
-	param_set(param_find("CA_AIRSHIP_AUX"), &aux);
+	int32_t tail = 1;
+	param_set(param_find("CA_AIRSHIP_TAIL"), &tail);
 }
 
 static void setCollectiveMode()
@@ -72,9 +83,32 @@ static void setCollectiveMode()
 	param_set(param_find("CA_AIRSHIP_GRP"), &grouping);
 }
 
+static void setSurfaces()
+{
+	int32_t surface_count = 2;
+	param_set(param_find("CA_SV_CS_COUNT"), &surface_count);
+	int32_t elevator = 3;
+	param_set(param_find("CA_SV_CS0_TYPE"), &elevator);
+	float pitch_torque = 1.f;
+	param_set(param_find("CA_SV_CS0_TRQ_P"), &pitch_torque);
+	int32_t rudder = 4;
+	param_set(param_find("CA_SV_CS1_TYPE"), &rudder);
+	float yaw_torque = 1.f;
+	param_set(param_find("CA_SV_CS1_TRQ_Y"), &yaw_torque);
+}
+
+// The actuator layout is decided when the actuators are declared, so every
+// updateSetpoint() needs a preceding declaration, as in the allocator
+static void declareActuators(ActuatorEffectivenessAirship &airship)
+{
+	ActuatorEffectiveness::Configuration configuration{};
+	airship.getEffectivenessMatrix(configuration, EffectivenessUpdateReason::CONFIGURATION_UPDATE);
+}
+
 static void runUpdateSetpoint(ActuatorEffectivenessAirship &airship, const Vector<float, 6> &control_sp,
 			      ActuatorEffectiveness::ActuatorVector &actuator_sp)
 {
+	declareActuators(airship);
 	ActuatorEffectiveness::ActuatorVector actuator_min{};
 	actuator_min.setAll(0.f);
 	ActuatorEffectiveness::ActuatorVector actuator_max{};
@@ -262,15 +296,14 @@ TEST(ActuatorEffectivenessAirshipTest, CollectiveModeCruiseAndClimb)
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.5f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.5f);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(COLLECTIVE_TILT), 0.f);
 
 	control_sp.setZero();
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = -1.f;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.5f); // +90 deg, both pods
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.5f);
+	EXPECT_FLOAT_EQ(actuator_sp(COLLECTIVE_TILT), 0.5f); // +90 deg
 }
 
 TEST(ActuatorEffectivenessAirshipTest, FixedMountRejectsVertical)
@@ -286,7 +319,6 @@ TEST(ActuatorEffectivenessAirshipTest, FixedMountRejectsVertical)
 	// Vertical demand has no component along the fixed forward mount
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
 
 	control_allocator_status_s status{};
 	airship.getUnallocatedControl(0, status);
@@ -377,14 +409,14 @@ TEST(ActuatorEffectivenessAirshipTest, CollectiveModeReverseCruise)
 	// Full reverse cruise through the tilt, with non-negative motors
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f); // 180 deg
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(COLLECTIVE_TILT), 1.f); // 180 deg
 }
 
 TEST(ActuatorEffectivenessAirshipTest, MotorLimitRespected)
 {
 	setTiltRange();
 	ActuatorEffectivenessAirship airship(nullptr);
+	declareActuators(airship);
 
 	Vector<float, 6> control_sp{};
 	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
@@ -430,10 +462,10 @@ TEST(ActuatorEffectivenessAirshipTest, PitchTorqueUnallocated)
 	EXPECT_FLOAT_EQ(status.unallocated_torque[1], -1.f);
 }
 
-TEST(ActuatorEffectivenessAirshipTest, AuxThrusterConfiguration)
+TEST(ActuatorEffectivenessAirshipTest, TailThrusterConfiguration)
 {
 	setTiltRange();
-	setAuxThruster();
+	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	ActuatorEffectiveness::Configuration configuration{};
@@ -443,11 +475,34 @@ TEST(ActuatorEffectivenessAirshipTest, AuxThrusterConfiguration)
 	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::SERVOS], 2);
 }
 
-TEST(ActuatorEffectivenessAirshipTest, AuxTailServesCollectiveYaw)
+TEST(ActuatorEffectivenessAirshipTest, CollectiveSingleTiltConfiguration)
 {
 	setTiltRange();
 	setCollectiveMode();
-	setAuxThruster();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// One tilt command registers one tilt servo
+	ActuatorEffectiveness::Configuration configuration{};
+	EXPECT_TRUE(airship.getEffectivenessMatrix(configuration, EffectivenessUpdateReason::MOTOR_ACTIVATION_UPDATE));
+	EXPECT_EQ(configuration.num_actuators_matrix[0], 3);
+	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::MOTORS], 2);
+	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::SERVOS], 1);
+
+	// The tail motor shifts the tilt but does not add servos
+	setTailThruster();
+	ActuatorEffectivenessAirship tail_airship(nullptr);
+	ActuatorEffectiveness::Configuration tail_configuration{};
+	EXPECT_TRUE(tail_airship.getEffectivenessMatrix(tail_configuration, EffectivenessUpdateReason::MOTOR_ACTIVATION_UPDATE));
+	EXPECT_EQ(tail_configuration.num_actuators_matrix[0], 4);
+	EXPECT_EQ(tail_configuration.num_actuators[(int)ActuatorType::MOTORS], 3);
+	EXPECT_EQ(tail_configuration.num_actuators[(int)ActuatorType::SERVOS], 1);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, TailServesCollectiveYaw)
+{
+	setTiltRange();
+	setCollectiveMode();
+	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -465,11 +520,11 @@ TEST(ActuatorEffectivenessAirshipTest, AuxTailServesCollectiveYaw)
 	EXPECT_FLOAT_EQ(status.unallocated_torque[2], 0.f);
 }
 
-TEST(ActuatorEffectivenessAirshipTest, AuxTailReverseNeedsConfiguration)
+TEST(ActuatorEffectivenessAirshipTest, TailReverseNeedsConfiguration)
 {
 	setTiltRange();
 	setCollectiveMode();
-	setAuxThruster();
+	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -497,10 +552,10 @@ TEST(ActuatorEffectivenessAirshipTest, AuxTailReverseNeedsConfiguration)
 	EXPECT_FLOAT_EQ(status.unallocated_torque[2], 0.f);
 }
 
-TEST(ActuatorEffectivenessAirshipTest, AuxTailIdleWithIndependentCouple)
+TEST(ActuatorEffectivenessAirshipTest, TailIdleWithIndependentCouple)
 {
 	setTiltRange();
-	setAuxThruster();
+	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -511,15 +566,15 @@ TEST(ActuatorEffectivenessAirshipTest, AuxTailIdleWithIndependentCouple)
 	// The couple serves the demand exactly: nothing left for the tail
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
-	EXPECT_FLOAT_EQ(actuator_sp(AUX_TILT_STARBOARD), 1.f); // +180 deg
-	EXPECT_FLOAT_EQ(actuator_sp(AUX_TILT_PORT), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(TAIL_TILT_STARBOARD), 1.f); // +180 deg
+	EXPECT_FLOAT_EQ(actuator_sp(TAIL_TILT_PORT), 0.f);
 	EXPECT_NEAR(actuator_sp(MOTOR_TAIL), 0.f, 1e-6f);
 }
 
-TEST(ActuatorEffectivenessAirshipTest, AuxTailTopsUpClampedRange)
+TEST(ActuatorEffectivenessAirshipTest, TailTopsUpClampedRange)
 {
 	setTiltRange(0.f, 0.f);
-	setAuxThruster();
+	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -540,38 +595,36 @@ TEST(ActuatorEffectivenessAirshipTest, AuxTailTopsUpClampedRange)
 TEST(ActuatorEffectivenessAirshipTest, AsymmetricTiltRange)
 {
 	// Mirror of the Cloudship preset: collective mode, reversible tail
-	// thruster, tilts from 0 deg (forward) to +90 deg (up)
+	// thruster, tilt range 0 deg (forward) to +90 deg (up)
 	setTiltRange(0.f, 90.f);
 	setCollectiveMode();
-	setAuxThruster();
+	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
+	declareActuators(airship);
 
 	ActuatorEffectiveness::ActuatorVector actuator_min{};
 	actuator_min.setAll(0.f);
 	actuator_min(MOTOR_TAIL) = -1.f;
-	actuator_min(AUX_TILT_STARBOARD) = -1.f;
-	actuator_min(AUX_TILT_PORT) = -1.f;
+	actuator_min(TAIL_COLLECTIVE_TILT) = -1.f;
 	ActuatorEffectiveness::ActuatorVector actuator_max{};
 	actuator_max.setAll(1.f);
 
-	// Cruise: 0 deg is the range minimum, so the servos sit at -1
+	// Cruise: 0 deg is the range minimum, so the tilt servo sits at -1
 	Vector<float, 6> control_sp{};
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = 0.5f;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.5f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.5f);
-	EXPECT_FLOAT_EQ(actuator_sp(AUX_TILT_STARBOARD), -1.f);
-	EXPECT_FLOAT_EQ(actuator_sp(AUX_TILT_PORT), -1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(TAIL_COLLECTIVE_TILT), -1.f);
 
-	// Climb: +90 deg is the range maximum, so the servos sit at +1
+	// Climb: +90 deg is the range maximum, so the tilt servo sits at +1
 	control_sp.setZero();
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = -1.f;
 	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
-	EXPECT_FLOAT_EQ(actuator_sp(AUX_TILT_STARBOARD), 1.f);
-	EXPECT_FLOAT_EQ(actuator_sp(AUX_TILT_PORT), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(TAIL_COLLECTIVE_TILT), 1.f);
 
 	// Reverse cruise is unreachable: the tilt clamps at +90 deg where the
 	// demand has no feasible component, and the shortfall is reported
@@ -586,4 +639,122 @@ TEST(ActuatorEffectivenessAirshipTest, AsymmetricTiltRange)
 	airship.getUnallocatedControl(0, status);
 	EXPECT_FLOAT_EQ(status.unallocated_thrust[0], -1.f);
 	EXPECT_FLOAT_EQ(status.unallocated_torque[2], 0.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, FixedMountConfiguration)
+{
+	setTiltRange(0.f, 0.f);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// A zero tilt range allocates no tilt servos
+	ActuatorEffectiveness::Configuration configuration{};
+	EXPECT_TRUE(airship.getEffectivenessMatrix(configuration, EffectivenessUpdateReason::MOTOR_ACTIVATION_UPDATE));
+	EXPECT_EQ(configuration.num_actuators_matrix[0], 2);
+	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::MOTORS], 2);
+	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::SERVOS], 0);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, SurfaceConfiguration)
+{
+	setTiltRange();
+	setSurfaces();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// The elevator and rudder follow the tilts, with matrix effectiveness
+	ActuatorEffectiveness::Configuration configuration{};
+	EXPECT_TRUE(airship.getEffectivenessMatrix(configuration, EffectivenessUpdateReason::MOTOR_ACTIVATION_UPDATE));
+	EXPECT_EQ(configuration.num_actuators_matrix[0], 6);
+	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::MOTORS], 2);
+	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::SERVOS], 4);
+	EXPECT_FLOAT_EQ(configuration.effectiveness_matrices[0](1, SURFACE_ELEVATOR), 1.f);
+	EXPECT_FLOAT_EQ(configuration.effectiveness_matrices[0](2, SURFACE_RUDDER), 1.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, SurfacesKeepTheirSetpoints)
+{
+	setTiltRange();
+	setSurfaces();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = 0.5f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	actuator_sp(SURFACE_ELEVATOR) = 0.7f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+
+	// The matrix allocation of the surfaces is left untouched
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.5f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.5f);
+	EXPECT_FLOAT_EQ(actuator_sp(SURFACE_ELEVATOR), 0.7f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, SurfacesServeFirst)
+{
+	setTiltRange();
+	setSurfaces();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// The rudder already carries 0.6 of the yaw demand from the matrix
+	// pass; the pods serve the remaining 0.4 and the report is exact
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	actuator_sp(SURFACE_RUDDER) = 0.6f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.4f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.4f);
+	EXPECT_FLOAT_EQ(actuator_sp(SURFACE_RUDDER), 0.6f);
+
+	control_allocator_status_s status{};
+	status.unallocated_torque[2] = 0.4f; // matrix residual: demand minus rudder
+	airship.getUnallocatedControl(0, status);
+	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, PitchDeferredToSurfaces)
+{
+	setTiltRange();
+	setSurfaces();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::PITCH) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
+
+	// With an elevator, the matrix residual stands instead of the flag
+	control_allocator_status_s status{};
+	status.unallocated_torque[1] = 0.25f;
+	airship.getUnallocatedControl(0, status);
+	EXPECT_FLOAT_EQ(status.unallocated_torque[1], 0.25f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, TailAfterSurfaces)
+{
+	setTiltRange();
+	setCollectiveMode();
+	setTailThruster();
+	setSurfaces();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// The rudder carries 0.6 of the yaw demand and the collective pods
+	// none: the tail serves only the remaining 0.4
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	actuator_sp(TAIL_COLLECTIVE_RUDDER) = 0.6f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_TAIL), 0.4f);
+	EXPECT_FLOAT_EQ(actuator_sp(TAIL_COLLECTIVE_RUDDER), 0.6f);
+
+	control_allocator_status_s status{};
+	status.unallocated_torque[2] = 0.4f; // matrix residual: demand minus rudder
+	airship.getUnallocatedControl(0, status);
+	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
 }

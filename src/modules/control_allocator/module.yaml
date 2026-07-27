@@ -37,30 +37,35 @@ parameters:
                 16: Airship
             default: 0
 
-        CA_AIRSHIP_AUX:
-            description:
-                short: Airship auxiliary yaw thruster
-                long: |
-                  Add a tail yaw thruster as motor 3. It serves the yaw
-                  demand that the pods leave unmet; configure it as
-                  reversible for yaw authority in both directions.
-            type: boolean
-            default: 0
-
         CA_AIRSHIP_GRP:
             description:
                 short: Airship propulsor command mode
                 long: |
                   Collective drives both pods with one thrust command and one
-                  tilt command; there is no differential thrust, and yaw and
-                  roll are reported as unallocated. Independent gives each
-                  pod its own thrust and tilt command. A zero tilt range
-                  degenerates either mode to fixed thrust axes. Pitch torque
+                  tilt command on a single tilt servo; there is no
+                  differential thrust, and yaw and roll are reported as
+                  unallocated. Independent gives each pod its own thrust and
+                  tilt command on its own tilt servo. A zero tilt range fixes
+                  the thrust axes and allocates no tilt servos. Pitch torque
                   is not produced by the pods and is reported as unallocated.
+                  Control surfaces (CA_SV_CS*) are allocated by the
+                  effectiveness matrix; the pods and the tail serve the
+                  demand they leave unmet.
             type: enum
             values:
                 0: Collective
                 1: Independent
+            default: 0
+
+        CA_AIRSHIP_TAIL:
+            description:
+                short: Airship tail yaw thruster
+                long: |
+                  Add a tail yaw thruster as motor 3. It serves the yaw
+                  demand that the pods and control surfaces leave unmet;
+                  configure it as reversible for yaw authority in both
+                  directions.
+            type: boolean
             default: 0
 
         CA_AIRSHIP_TLMIN:
