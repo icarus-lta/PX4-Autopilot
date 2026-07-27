@@ -37,6 +37,16 @@ parameters:
                 16: Airship
             default: 0
 
+        CA_AIRSHIP_AUX:
+            description:
+                short: Airship auxiliary yaw thruster
+                long: |
+                  Add a tail yaw thruster as motor 3. It serves the yaw
+                  demand that the pods leave unmet; configure it as
+                  reversible for yaw authority in both directions.
+            type: boolean
+            default: 0
+
         CA_AIRSHIP_GRP:
             description:
                 short: Airship propulsor command mode
