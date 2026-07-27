@@ -75,6 +75,7 @@ private:
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::CA_AIRSHIP_TLMIN>) _param_ca_airship_tlmin,
 		(ParamFloat<px4::params::CA_AIRSHIP_TLMAX>) _param_ca_airship_tlmax,
-		(ParamInt<px4::params::CA_AIRSHIP_GRP>) _param_ca_airship_grp
+		(ParamInt<px4::params::CA_AIRSHIP_GRP>) _param_ca_airship_grp,
+		(ParamBool<px4::params::CA_AIRSHIP_AUX>) _param_ca_airship_aux
 	)
 };
