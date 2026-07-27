@@ -37,6 +37,22 @@ parameters:
                 16: Airship
             default: 0
 
+        CA_AIRSHIP_GRP:
+            description:
+                short: Airship propulsor command mode
+                long: |
+                  Collective drives both pods with one thrust command and one
+                  tilt command; there is no differential thrust, and yaw and
+                  roll are reported as unallocated. Independent gives each
+                  pod its own thrust and tilt command. A zero tilt range
+                  degenerates either mode to fixed thrust axes. Pitch torque
+                  is not produced by the pods and is reported as unallocated.
+            type: enum
+            values:
+                0: Collective
+                1: Independent
+            default: 0
+
         CA_AIRSHIP_TLMIN:
             description:
                 short: Airship tilt angle at minimum servo output
@@ -48,7 +64,7 @@ parameters:
             unit: 'deg'
             min: -180.0
             max: 0.0
-            default: -180.0
+            default: 0.0
 
         CA_AIRSHIP_TLMAX:
             description:
@@ -61,7 +77,7 @@ parameters:
             unit: 'deg'
             min: 0.0
             max: 180.0
-            default: 180.0
+            default: 0.0
 
         CA_METHOD:
             description:
