@@ -39,7 +39,7 @@ param set-default SIM_GZ_SV_MAXA1 180
 param set-default SIM_GZ_SV_MINA2 -180
 param set-default SIM_GZ_SV_MAXA2 180
 
-# Independently vectored side pods; full yaw commands the 0/180 deg couple
+# Independently vectored side pods
 param set-default CA_AIRFRAME 16
 param set-default CA_AIRSHIP_GRP 1
 param set-default CA_AIRSHIP_TLMIN -180
