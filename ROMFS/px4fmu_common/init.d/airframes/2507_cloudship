@@ -21,7 +21,7 @@ param set-default COM_PREARM_MODE 2
 # thruster; the tilt range is a placeholder pending vehicle data
 param set-default CA_AIRFRAME 16
 param set-default CA_AIRSHIP_GRP 0
-param set-default CA_AIRSHIP_AUX 1
+param set-default CA_AIRSHIP_TAIL 1
 param set-default CA_AIRSHIP_TLMIN 0
 param set-default CA_AIRSHIP_TLMAX 90
 
