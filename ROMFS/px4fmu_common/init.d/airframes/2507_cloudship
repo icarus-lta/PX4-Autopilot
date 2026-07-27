@@ -17,23 +17,12 @@
 
 param set-default COM_PREARM_MODE 2
 
-param set-default CA_AIRFRAME 9
+# One collective thrust and tilt command with a reversible tail yaw
+# thruster; the tilt range is a placeholder pending vehicle data
+param set-default CA_AIRFRAME 16
+param set-default CA_AIRSHIP_GRP 0
+param set-default CA_AIRSHIP_AUX 1
+param set-default CA_AIRSHIP_TLMIN 0
+param set-default CA_AIRSHIP_TLMAX 90
 
-param set-default CA_ROTOR_COUNT 3
-param set-default CA_ROTOR0_AX 1
-param set-default CA_ROTOR0_AZ 0
-param set-default CA_ROTOR0_KM 0
-param set-default CA_ROTOR0_PY 2
-param set-default CA_ROTOR1_AX 1
-param set-default CA_ROTOR1_AZ 0
-param set-default CA_ROTOR1_KM 0
-param set-default CA_ROTOR1_PY -2
-param set-default CA_ROTOR2_AY -1
-param set-default CA_ROTOR2_AZ 0
-param set-default CA_ROTOR2_KM 0
-param set-default CA_ROTOR2_PX -10
-
-param set-default CA_SV_CS_COUNT 1
-param set-default CA_SV_CS0_TRQ_P 1
-
-param set-default CA_R_REV 7
+param set-default CA_R_REV 4
