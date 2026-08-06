@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# @name Generic Airship (Independent Vectoring)
+#
+# @type Airship
+# @class Airship
+#
+# @maintainer Hyunduk Shin <hyunduk@icarus-airship.com>
+#
+# @output Motor1 starboard pod motor
+# @output Motor2 port pod motor
+# @output Servo1 starboard pod tilt
+# @output Servo2 port pod tilt
+#
+# @board px4_fmu-v2 exclude
+# @board bitcraze_crazyflie exclude
+#
+
+. ${R}etc/init.d/rc.airship_defaults
+
+param set-default COM_PREARM_MODE 2
+
+# Independently vectored side pods; the tilt range is a placeholder
+# pending the vehicle specification
+param set-default CA_AIRFRAME 16
+param set-default CA_AIRSHIP_GRP 1
+param set-default CA_AIRSHIP_TLMIN -180
+param set-default CA_AIRSHIP_TLMAX 180
