@@ -69,6 +69,13 @@ static void setTiltRange(float tilt_min_deg = -180.f, float tilt_max_deg = 180.f
 	param_set(param_find("CA_AIRSHIP_TLMAX"), &tilt_max_deg);
 	int32_t surface_count = 0;
 	param_set(param_find("CA_SV_CS_COUNT"), &surface_count);
+	float surface_credit = 1.f;
+	param_set(param_find("CA_AIRSHIP_CS_K"), &surface_credit);
+}
+
+static void setSurfaceCredit(float credit)
+{
+	param_set(param_find("CA_AIRSHIP_CS_K"), &credit);
 }
 
 static void setTailThruster()
@@ -710,6 +717,83 @@ TEST(ActuatorEffectivenessAirshipTest, SurfacesServeFirst)
 	status.unallocated_torque[2] = 0.4f; // matrix residual: demand minus rudder
 	airship.getUnallocatedControl(0, status);
 	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditZeroPodsServeAll)
+{
+	setTiltRange();
+	setSurfaces();
+	setSurfaceCredit(0.f);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// The rudder still deflects with its matrix allocation, but with no
+	// credit the pods serve the whole demand: full yaw couple as in hover
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	actuator_sp(SURFACE_RUDDER) = 0.6f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f); // +180 deg
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);      // forward
+	EXPECT_FLOAT_EQ(actuator_sp(SURFACE_RUDDER), 0.6f);
+
+	// The uncredited rudder share cancels against the solver residual:
+	// the pods served everything, so nothing is unallocated
+	control_allocator_status_s status{};
+	status.unallocated_torque[2] = 0.4f; // matrix residual: demand minus rudder
+	airship.getUnallocatedControl(0, status);
+	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditSharesProportionally)
+{
+	setTiltRange();
+	setSurfaces();
+	setSurfaceCredit(0.5f);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// Half credit: of the rudder's 0.6 allocation only 0.3 is trusted,
+	// so the pods serve the remaining 0.7 of the demand
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	actuator_sp(SURFACE_RUDDER) = 0.6f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.7f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.7f);
+	EXPECT_FLOAT_EQ(actuator_sp(SURFACE_RUDDER), 0.6f);
+
+	control_allocator_status_s status{};
+	status.unallocated_torque[2] = 0.4f; // matrix residual: demand minus rudder
+	airship.getUnallocatedControl(0, status);
+	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditZeroReportsHoverPitch)
+{
+	setTiltRange();
+	setSurfaces();
+	setSurfaceCredit(0.f);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::PITCH) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	actuator_sp(SURFACE_ELEVATOR) = 0.75f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
+
+	// With no credit, the elevator's share is honestly reported on top
+	// of the matrix residual: the whole pitch demand is unallocated
+	control_allocator_status_s status{};
+	status.unallocated_torque[1] = 0.25f; // matrix residual: demand minus elevator
+	airship.getUnallocatedControl(0, status);
+	EXPECT_FLOAT_EQ(status.unallocated_torque[1], 1.f);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, PitchDeferredToSurfaces)
