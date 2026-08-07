@@ -83,6 +83,9 @@ private:
 	bool _independent{false};
 
 	bool _surface_serves[3] {};	///< torque axes with control-surface effectiveness
+	float _surface_roll{0.f};	///< torque the matrix allocated to the surfaces
+	float _surface_pitch{0.f};
+	float _surface_yaw{0.f};
 	float _achieved_roll{0.f};
 	float _achieved_yaw{0.f};
 
@@ -90,6 +93,7 @@ private:
 		(ParamFloat<px4::params::CA_AIRSHIP_TLMIN>) _param_ca_airship_tlmin,
 		(ParamFloat<px4::params::CA_AIRSHIP_TLMAX>) _param_ca_airship_tlmax,
 		(ParamInt<px4::params::CA_AIRSHIP_GRP>) _param_ca_airship_grp,
-		(ParamBool<px4::params::CA_AIRSHIP_TAIL>) _param_ca_airship_tail
+		(ParamBool<px4::params::CA_AIRSHIP_TAIL>) _param_ca_airship_tail,
+		(ParamFloat<px4::params::CA_AIRSHIP_CS_K>) _param_ca_airship_cs_k
 	)
 };

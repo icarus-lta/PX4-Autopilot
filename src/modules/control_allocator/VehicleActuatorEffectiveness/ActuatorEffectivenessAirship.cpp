@@ -100,18 +100,28 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	const float thrust_up = -control_sp(ControlAxis::THRUST_Z);
 
 	// Control surfaces are allocated by the matrix; the pods and the tail
-	// serve the demand they leave unmet.
+	// serve the demand they leave unmet. The surface torque is credited
+	// only by CA_AIRSHIP_CS_K: still-air surfaces deliver none of their
+	// allocation, so at low credit the propulsors serve it instead.
 	float surface_roll = 0.f;
+	float surface_pitch = 0.f;
 	float surface_yaw = 0.f;
 
 	for (int i = 0; i < _control_surfaces.count(); i++) {
 		const Vector3f &torque = _control_surfaces.config(i).torque;
 		surface_roll += torque(0) * actuator_sp(_first_control_surface_idx + i);
+		surface_pitch += torque(1) * actuator_sp(_first_control_surface_idx + i);
 		surface_yaw += torque(2) * actuator_sp(_first_control_surface_idx + i);
 	}
 
-	const float yaw = control_sp(ControlAxis::YAW) - surface_yaw;
-	const float roll = control_sp(ControlAxis::ROLL) - surface_roll;
+	_surface_roll = surface_roll;
+	_surface_pitch = surface_pitch;
+	_surface_yaw = surface_yaw;
+
+	const float credit = _param_ca_airship_cs_k.get();
+
+	const float yaw = control_sp(ControlAxis::YAW) - credit * surface_yaw;
+	const float roll = control_sp(ControlAxis::ROLL) - credit * surface_roll;
 
 	const float tilt_min = math::radians(_param_ca_airship_tlmin.get());
 	const float tilt_max = math::radians(_param_ca_airship_tlmax.get());
@@ -212,9 +222,12 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 	// Note: the values '-1', '1' and '0' are just to indicate a negative,
 	// positive or no saturation to the rate controller. The actual magnitude
 	// is not used. Torque axes with control-surface effectiveness instead
-	// keep the matrix residual, reduced by what the pods and tail achieved.
+	// keep the matrix residual, corrected for the uncredited share of the
+	// surface allocation and reduced by what the pods and tail achieved.
+	const float uncredited = 1.f - _param_ca_airship_cs_k.get();
+
 	if (_surface_serves[0]) {
-		status.unallocated_torque[0] -= _achieved_roll;
+		status.unallocated_torque[0] += uncredited * _surface_roll - _achieved_roll;
 
 	} else if (_saturation_flags.roll_pos) {
 		status.unallocated_torque[0] = 1.f;
@@ -227,7 +240,8 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 	}
 
 	if (_surface_serves[1]) {
-		// The pods produce no pitch torque: the matrix residual stands
+		// The pods produce no pitch torque: the credited residual stands
+		status.unallocated_torque[1] += uncredited * _surface_pitch;
 
 	} else if (_saturation_flags.pitch_pos) {
 		status.unallocated_torque[1] = 1.f;
@@ -240,7 +254,7 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 	}
 
 	if (_surface_serves[2]) {
-		status.unallocated_torque[2] -= _achieved_yaw;
+		status.unallocated_torque[2] += uncredited * _surface_yaw - _achieved_yaw;
 
 	} else if (_saturation_flags.yaw_pos) {
 		status.unallocated_torque[2] = 1.f;
