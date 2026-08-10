@@ -39,6 +39,13 @@
 
 using namespace matrix;
 
+// The tilt direction is the atan2 of the pod force demand, which is
+// meaningless near zero magnitude: stick noise alone would slam the tilt
+// between opposite directions. Steering therefore engages only above the
+// stick-noise floor and releases at half of it.
+static constexpr float kTiltSteerEngage = 0.02f;
+static constexpr float kTiltSteerRelease = 0.01f;
+
 bool
 ActuatorEffectivenessAirship::getEffectivenessMatrix(Configuration &configuration,
 		EffectivenessUpdateReason external_update)
@@ -136,6 +143,18 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		fz[0] = fz[1] = thrust_up;
 	}
 
+	if (_actuator_armed_sub.updated()) {
+		actuator_armed_s armed;
+
+		if (_actuator_armed_sub.copy(&armed)) {
+			_armed = armed.armed;
+		}
+	}
+
+	const hrt_abstime now = hrt_absolute_time();
+	const float dt = math::constrain((now - _last_update_time) * 1e-6f, 1e-3f, 0.1f);
+	_last_update_time = now;
+
 	float thrust[2];
 	float cos_tilt[2];
 	float sin_tilt[2];
@@ -144,8 +163,12 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		const float magnitude = sqrtf(fx[i] * fx[i] + fz[i] * fz[i]);
 
 		// Hold the previous tilt through (near-)zero thrust, where the
-		// direction is undefined.
-		if (magnitude > 1e-3f) {
+		// direction is undefined; disarmed, park the tilt level.
+		float tilt_target = _armed ? _tilt[i] : 0.f;
+		const float steer_threshold = _tilt_steering[i] ? kTiltSteerRelease : kTiltSteerEngage;
+
+		if (_armed && magnitude > steer_threshold) {
+			_tilt_steering[i] = true;
 			float tilt = atan2f(fz[i], fx[i]);
 
 			// atan2 of negative zero yields -pi: prefer the +180 deg
@@ -154,14 +177,27 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 				tilt = M_PI_F;
 			}
 
-			_tilt[i] = math::constrain(tilt, tilt_min, tilt_max);
+			tilt_target = math::constrain(tilt, tilt_min, tilt_max);
+
+		} else {
+			_tilt_steering[i] = false;
+		}
+
+		// The tilt is a physical state: rate-limit it toward the target
+		const float max_step = math::radians(_param_ca_airship_tlt_r.get()) * dt;
+
+		if (max_step > FLT_EPSILON) {
+			_tilt[i] += math::constrain(tilt_target - _tilt[i], -max_step, max_step);
+
+		} else {
+			_tilt[i] = tilt_target;
 		}
 
 		cos_tilt[i] = cosf(_tilt[i]);
 		sin_tilt[i] = sinf(_tilt[i]);
 
 		// Project the demand onto the realized tilt: the feasible
-		// component when the tilt is clamped or fixed.
+		// component when the tilt is clamped, fixed or still slewing.
 		thrust[i] = fx[i] * cos_tilt[i] + fz[i] * sin_tilt[i];
 	}
 

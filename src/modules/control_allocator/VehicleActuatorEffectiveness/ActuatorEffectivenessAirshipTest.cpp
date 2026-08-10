@@ -33,6 +33,7 @@
 
 #include <gtest/gtest.h>
 #include "ActuatorEffectivenessAirship.hpp"
+#include <uORB/Publication.hpp>
 
 using namespace matrix;
 
@@ -71,11 +72,18 @@ static void setTiltRange(float tilt_min_deg = -180.f, float tilt_max_deg = 180.f
 	param_set(param_find("CA_SV_CS_COUNT"), &surface_count);
 	float surface_credit = 1.f;
 	param_set(param_find("CA_AIRSHIP_CS_K"), &surface_credit);
+	float tilt_rate = 0.f;
+	param_set(param_find("CA_AIRSHIP_TLT_R"), &tilt_rate);
 }
 
 static void setSurfaceCredit(float credit)
 {
 	param_set(param_find("CA_AIRSHIP_CS_K"), &credit);
+}
+
+static void setTiltRate(float rate_deg_s)
+{
+	param_set(param_find("CA_AIRSHIP_TLT_R"), &rate_deg_s);
 }
 
 static void setTailThruster()
@@ -841,4 +849,101 @@ TEST(ActuatorEffectivenessAirshipTest, TailAfterSurfaces)
 	status.unallocated_torque[2] = 0.4f; // matrix residual: demand minus rudder
 	airship.getUnallocatedControl(0, status);
 	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, NoiseBelowSteerThresholdHoldsTilt)
+{
+	setTiltRange();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// Establish a steered tilt with a full yaw couple
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
+
+	// Stick noise below the steering threshold must not move the tilts,
+	// even though it exceeds the old near-zero hold bound
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.01f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, SteerHysteresisBand)
+{
+	setTiltRange();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// Engage steering above the engage threshold
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
+
+	// In the hysteresis band the engaged steering keeps tracking: the
+	// reversed demand flips the starboard tilt back to forward
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = -0.015f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
+
+	// Below the release threshold the hold takes over again
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.005f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, TiltRateLimited)
+{
+	setTiltRange();
+	setTiltRate(90.f);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// A full vertical demand asks for +90 deg, but the first update may
+	// move the tilt at most 90 deg/s * dt (dt is clamped to 0.1 s)
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = -1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	const float first = actuator_sp(TILT_STARBOARD);
+	EXPECT_GT(first, 0.f);
+	EXPECT_LT(first, 0.1f); // well below the +90 deg target at 0.25
+
+	// The tilt keeps slewing toward the target on the next update
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_GT(actuator_sp(TILT_STARBOARD), first);
+	EXPECT_LT(actuator_sp(TILT_STARBOARD), 0.25f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, DisarmParksTiltLevel)
+{
+	setTiltRange();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// Armed (default without an actuator_armed sample): full yaw couple
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
+
+	// Disarmed, the tilt parks level regardless of the demand and the
+	// reverse projection clamps the motor off
+	uORB::Publication<actuator_armed_s> armed_pub{ORB_ID(actuator_armed)};
+	actuator_armed_s armed{};
+	armed.timestamp = hrt_absolute_time();
+	armed.armed = false;
+	armed_pub.publish(armed);
+
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f); // parked at 0 deg, forward
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
+
+	// Restore the armed state for any test that runs after this one
+	armed.timestamp = hrt_absolute_time();
+	armed.armed = true;
+	armed_pub.publish(armed);
 }
