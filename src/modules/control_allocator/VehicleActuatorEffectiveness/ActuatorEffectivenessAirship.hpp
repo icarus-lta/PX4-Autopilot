@@ -36,7 +36,10 @@
 #include "control_allocation/actuator_effectiveness/ActuatorEffectiveness.hpp"
 #include "ActuatorEffectivenessControlSurfaces.hpp"
 
+#include <drivers/drv_hrt.h>
 #include <px4_platform_common/module_params.h>
+#include <uORB/Subscription.hpp>
+#include <uORB/topics/actuator_armed.h>
 
 class ActuatorEffectivenessAirship : public ModuleParams, public ActuatorEffectiveness
 {
@@ -71,7 +74,12 @@ private:
 
 	SaturationFlags _saturation_flags{};
 
-	float _tilt[2] {}; ///< last commanded tilt [rad], held through zero-thrust
+	float _tilt[2] {};		///< last commanded tilt [rad], held through zero-thrust
+	bool _tilt_steering[2] {};	///< per-pod hysteresis state of the direction hold
+	bool _armed{true};		///< assume armed until actuator_armed reports otherwise
+	hrt_abstime _last_update_time{0};
+
+	uORB::Subscription _actuator_armed_sub{ORB_ID(actuator_armed)};
 
 	ActuatorEffectivenessControlSurfaces _control_surfaces;
 
@@ -94,6 +102,7 @@ private:
 		(ParamFloat<px4::params::CA_AIRSHIP_TLMAX>) _param_ca_airship_tlmax,
 		(ParamInt<px4::params::CA_AIRSHIP_GRP>) _param_ca_airship_grp,
 		(ParamBool<px4::params::CA_AIRSHIP_TAIL>) _param_ca_airship_tail,
-		(ParamFloat<px4::params::CA_AIRSHIP_CS_K>) _param_ca_airship_cs_k
+		(ParamFloat<px4::params::CA_AIRSHIP_CS_K>) _param_ca_airship_cs_k,
+		(ParamFloat<px4::params::CA_AIRSHIP_TLT_R>) _param_ca_airship_tlt_r
 	)
 };

@@ -94,6 +94,21 @@ parameters:
             max: 180.0
             default: 0.0
 
+        CA_AIRSHIP_TLT_R:
+            description:
+                short: Airship tilt slew rate limit
+                long: |
+                  Maximum rate of the commanded pod tilt angle. The tilt is
+                  a physical servo state: limiting its rate prevents the
+                  allocation from commanding instantaneous direction jumps.
+                  Zero disables the limit.
+            type: float
+            decimal: 0
+            unit: 'deg/s'
+            min: 0.0
+            max: 720.0
+            default: 0.0
+
         CA_AIRSHIP_CS_K:
             description:
                 short: Airship control-surface torque credit

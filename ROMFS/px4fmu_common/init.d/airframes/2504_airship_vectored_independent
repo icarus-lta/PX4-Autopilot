@@ -20,9 +20,10 @@
 
 param set-default COM_PREARM_MODE 2
 
-# Independently vectored side pods; the tilt range is a placeholder
-# pending the vehicle specification
+# Independently vectored side pods; the tilt range and slew rate are
+# placeholders pending the vehicle specification
 param set-default CA_AIRFRAME 16
 param set-default CA_AIRSHIP_GRP 1
 param set-default CA_AIRSHIP_TLMIN -180
 param set-default CA_AIRSHIP_TLMAX 180
+param set-default CA_AIRSHIP_TLT_R 120
