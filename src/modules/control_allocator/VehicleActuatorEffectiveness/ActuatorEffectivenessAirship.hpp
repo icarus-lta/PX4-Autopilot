@@ -74,7 +74,8 @@ private:
 
 	SaturationFlags _saturation_flags{};
 
-	float _tilt[2] {};		///< last commanded tilt [rad], held through zero-thrust
+	float _tilt[2] {};		///< realized tilt [rad], held through zero-thrust
+	float _tilt_target[2] {};	///< commanded tilt [rad] the slew tracks; holds through the hysteresis band
 	bool _tilt_steering[2] {};	///< per-pod hysteresis state of the direction hold
 	bool _armed{true};		///< assume armed until actuator_armed reports otherwise
 	hrt_abstime _last_update_time{0};
