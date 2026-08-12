@@ -619,8 +619,8 @@ TEST(ActuatorEffectivenessAirshipTest, TailTopsUpClampedRange)
 
 TEST(ActuatorEffectivenessAirshipTest, AsymmetricTiltRange)
 {
-	// Mirror of the Cloudship preset: collective mode, reversible tail
-	// thruster, tilt range 0 deg (forward) to +90 deg (up)
+	// An up-only tilt range: collective mode, reversible tail thruster,
+	// 0 deg (forward) to +90 deg (up)
 	setTiltRange(0.f, 90.f);
 	setCollectiveMode();
 	setTailThruster();
@@ -1032,6 +1032,108 @@ TEST(ActuatorEffectivenessAirshipTest, TiltServoLimitBoundsProjection)
 	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 0.f, 1e-6f);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 1.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, CloudshipMirrorSymmetricTilt)
+{
+	// Mirror of the Cloudship preset: collective mode, reversible tail
+	// thruster, symmetric tilt range -90..+90 deg (level = servo 0)
+	setTiltRange(-90.f, 90.f);
+	setCollectiveMode();
+	setTailThruster();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// Cruise: level tilt sits at the servo center, as the old mixer did
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = 0.5f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.5f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.5f);
+	EXPECT_FLOAT_EQ(actuator_sp(TAIL_COLLECTIVE_TILT), 0.f);
+
+	// Climb: +90 deg is the range maximum
+	control_sp.setZero();
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = -1.f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(TAIL_COLLECTIVE_TILT), 1.f);
+
+	// Descent: the symmetric range restores downward vectoring
+	control_sp.setZero();
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = 1.f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(TAIL_COLLECTIVE_TILT), -1.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, RearAnchorPicksReachableEnd)
+{
+	// Down-only range: straight back is realizable only at -180 deg,
+	// so the anchor must not commit to the unreachable +180 end
+	setTiltRange(-180.f, 0.f);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), -1.f); // -180 deg
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), -1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, NegativeEndCommitmentHeld)
+{
+	setTiltRange();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// A down-and-back demand commits the starboard tilt to the negative
+	// side of the range
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.2f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_LT(actuator_sp(TILT_STARBOARD), -0.9f); // ~ -169 deg
+
+	// Straight back inside the cone must hold the -180 end, whichever
+	// way the perpendicular noise points
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.005f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), -1.f);
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = -0.005f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), -1.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, CollectiveClampedServoRealizedCopy)
+{
+	setTiltRange();
+	setCollectiveMode();
+	ActuatorEffectivenessAirship airship(nullptr);
+	declareActuators(airship);
+
+	ActuatorEffectiveness::ActuatorVector actuator_min{};
+	actuator_min.setAll(-1.f);
+	actuator_min(MOTOR_STARBOARD) = 0.f;
+	actuator_min(MOTOR_PORT) = 0.f;
+	ActuatorEffectiveness::ActuatorVector actuator_max{};
+	actuator_max.setAll(1.f);
+	actuator_max(COLLECTIVE_TILT) = 0.5f; // +90 deg reachable at most
+
+	// Full reverse asks for +180 deg; the clamped collective servo stops
+	// at +90 deg and BOTH pods must project onto that realized angle
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
+
+	EXPECT_FLOAT_EQ(actuator_sp(COLLECTIVE_TILT), 0.5f);
+	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 0.f, 1e-6f);
+	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.f, 1e-6f);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, TiltRateLimited)

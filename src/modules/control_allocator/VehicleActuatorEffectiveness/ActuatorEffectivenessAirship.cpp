@@ -132,7 +132,8 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		// (setpoint - trim) after clipping, but this runs before
 		// clipActuatorSetpoint(): apply the limits and trim locally so
 		// saturated or trimmed surfaces are not credited torque they
-		// cannot deliver.
+		// cannot deliver. A CA_SVn_SLEW on a surface runs later still
+		// and stays invisible to the credit.
 		const float deflection = math::constrain(actuator_sp(idx), actuator_min(idx), actuator_max(idx))
 					 - _control_surfaces.config(i).trim;
 		const Vector3f &torque = _control_surfaces.config(i).torque;
@@ -171,8 +172,9 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		}
 	}
 
-	// dt floor matches the allocator's own scheduling clamp: a larger
-	// floor would inflate the slew step at fast gyro rates
+	// The dt floor matches the allocator's scheduling clamp so fast gyro
+	// rates do not inflate the slew step; the larger ceiling only bounds
+	// the first step after a scheduling gap
 	const hrt_abstime now = hrt_absolute_time();
 	const float dt = math::constrain((now - _last_update_time) * 1e-6f, 2e-4f, 0.1f);
 	_last_update_time = now;
@@ -194,11 +196,21 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 			_tilt_steering[i] = true;
 			float tilt = atan2f(fz[i], fx[i]);
 
-			// A (near-)straight-back demand is realizable at either end:
-			// keep the end already committed to, so noise on the
-			// perpendicular axis cannot flip the target across the range
-			if (fx[i] < 0.f && fabsf(fz[i]) < kTiltRearCone * magnitude) {
-				tilt = _tilt_target[i] >= 0.f ? M_PI_F : -M_PI_F;
+			// A (near-)straight-back demand is realizable at either end
+			// of the range: pick the end that realizes it best, and on a
+			// tie keep the end already committed to, so noise on the
+			// perpendicular axis cannot flip the target across the
+			// range. The cone floor covers stick noise at low demand.
+			if (fx[i] < 0.f && fabsf(fz[i]) < fmaxf(kTiltRearCone * magnitude, kTiltSteerRelease)) {
+				const float rear_hi = math::constrain(M_PI_F, tilt_min, tilt_max);
+				const float rear_lo = math::constrain(-M_PI_F, tilt_min, tilt_max);
+
+				if (fabsf(cosf(rear_hi) - cosf(rear_lo)) > FLT_EPSILON) {
+					tilt = cosf(rear_hi) < cosf(rear_lo) ? rear_hi : rear_lo;
+
+				} else {
+					tilt = _tilt_target[i] >= 0.f ? rear_hi : rear_lo;
+				}
 			}
 
 			_tilt_target[i] = math::constrain(tilt, tilt_min, tilt_max);
@@ -221,7 +233,10 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	}
 
 	// Write the tilt servos before projecting: the projection must use
-	// the angle the servo output can actually realize
+	// the angle the servo output can actually realize. Realized means
+	// after the min/max clamp - the generic CA_SVn_SLEW runs later and
+	// is invisible to this model, so tilt slewing belongs in
+	// CA_AIRSHIP_TLT_R.
 	if (_tilt_count > 0 && tilt_span > kMinTiltSpan) {
 		for (int i = 0; i < _tilt_count; i++) {
 			const int idx = _first_tilt_idx + i;
