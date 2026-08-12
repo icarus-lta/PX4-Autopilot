@@ -126,10 +126,19 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	float surface_yaw = 0.f;
 
 	for (int i = 0; i < _control_surfaces.count(); i++) {
+		const int idx = _first_control_surface_idx + i;
+
+		// Delivered torque in the allocator's model is effectiveness *
+		// (setpoint - trim) after clipping, but this runs before
+		// clipActuatorSetpoint(): apply the limits and trim locally so
+		// saturated or trimmed surfaces are not credited torque they
+		// cannot deliver.
+		const float deflection = math::constrain(actuator_sp(idx), actuator_min(idx), actuator_max(idx))
+					 - _control_surfaces.config(i).trim;
 		const Vector3f &torque = _control_surfaces.config(i).torque;
-		surface_roll += torque(0) * actuator_sp(_first_control_surface_idx + i);
-		surface_pitch += torque(1) * actuator_sp(_first_control_surface_idx + i);
-		surface_yaw += torque(2) * actuator_sp(_first_control_surface_idx + i);
+		surface_roll += torque(0) * deflection;
+		surface_pitch += torque(1) * deflection;
+		surface_yaw += torque(2) * deflection;
 	}
 
 	_surface_roll = surface_roll;

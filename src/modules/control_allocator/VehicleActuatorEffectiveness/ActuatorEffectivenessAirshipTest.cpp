@@ -861,6 +861,54 @@ TEST(ActuatorEffectivenessAirshipTest, TailAfterSurfaces)
 	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
 }
 
+TEST(ActuatorEffectivenessAirshipTest, SurfaceTrimNotCredited)
+{
+	setTiltRange();
+	setSurfaces();
+	float trim = 0.2f;
+	param_set(param_find("CA_SV_CS1_TRIM"), &trim);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// The rudder sits exactly at its trim: it delivers no torque, so the
+	// pods must serve the whole demand and the report must not drift
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	actuator_sp(SURFACE_RUDDER) = 0.2f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
+
+	control_allocator_status_s status{};
+	status.unallocated_torque[2] = 1.f; // matrix residual: demand minus (rudder - trim)
+	airship.getUnallocatedControl(0, status);
+	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
+
+	trim = 0.f;
+	param_set(param_find("CA_SV_CS1_TRIM"), &trim);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, SaturatedSurfaceNotOverCredited)
+{
+	setTiltRange();
+	setSurfaces();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// The matrix over-allocated the rudder to 1.5, but only the clipped
+	// 1.0 can ever be delivered: crediting the excess would push a
+	// phantom negative demand into the pods
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	actuator_sp(SURFACE_RUDDER) = 1.5f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+
+	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 0.f, 1e-6f);
+	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.f, 1e-6f);
+	EXPECT_FLOAT_EQ(actuator_sp(SURFACE_RUDDER), 1.5f); // clipping stays the allocator's job
+}
+
 TEST(ActuatorEffectivenessAirshipTest, NoiseBelowSteerThresholdHoldsTilt)
 {
 	setTiltRange();
