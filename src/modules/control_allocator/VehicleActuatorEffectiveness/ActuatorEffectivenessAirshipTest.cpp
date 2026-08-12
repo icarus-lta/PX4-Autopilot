@@ -124,8 +124,18 @@ static void runUpdateSetpoint(ActuatorEffectivenessAirship &airship, const Vecto
 			      ActuatorEffectiveness::ActuatorVector &actuator_sp)
 {
 	declareActuators(airship);
+
+	// Production limits: motors are non-reversible (no CA_R_REV) at
+	// [0, 1], servos span the full [-1, 1]
+	int32_t tail = 0;
+	param_get(param_find("CA_AIRSHIP_TAIL"), &tail);
 	ActuatorEffectiveness::ActuatorVector actuator_min{};
-	actuator_min.setAll(0.f);
+	actuator_min.setAll(-1.f);
+
+	for (int i = 0; i < (tail ? 3 : 2); i++) {
+		actuator_min(i) = 0.f;
+	}
+
 	ActuatorEffectiveness::ActuatorVector actuator_max{};
 	actuator_max.setAll(1.f);
 	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
@@ -884,16 +894,96 @@ TEST(ActuatorEffectivenessAirshipTest, SteerHysteresisBand)
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 
-	// In the hysteresis band the engaged steering keeps tracking: the
-	// reversed demand flips the starboard tilt back to forward
+	// Inside the band the last commanded direction stands: a reversed
+	// demand below the engage floor must not retarget the tilt
 	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = -0.015f;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 
-	// Below the release threshold the hold takes over again
+	// Below the release threshold the hold takes over
 	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.005f;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
+
+	// A reversal above the engage floor is a real demand and retargets
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = -1.f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, RearDemandNoiseKeepsChosenEnd)
+{
+	setTiltRange();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// A straight-back demand commits both tilts to the +180 deg end
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
+
+	// Perpendicular noise flips the sign of the small fz component: the
+	// committed end must hold, not swing across the whole range
+	for (int step = -2; step <= 2; step++) {
+		control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.0025f * step;
+		runUpdateSetpoint(airship, control_sp, actuator_sp);
+		EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
+		EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 1.f);
+	}
+}
+
+TEST(ActuatorEffectivenessAirshipTest, SlewKeepsCommittedEnd)
+{
+	setTiltRange();
+	setTiltRate(90.f);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// Commit to the +180 deg end; the first slew step moves 9 deg at most
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	const float first = actuator_sp(TILT_STARBOARD);
+	EXPECT_GT(first, 0.f);
+
+	// Noise on the perpendicular axis while the servo is still slewing
+	// must not re-decide the end: the tilt keeps moving the same way
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.005f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_GT(actuator_sp(TILT_STARBOARD), first);
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = -0.005f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_GT(actuator_sp(TILT_STARBOARD), first);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, TiltServoLimitBoundsProjection)
+{
+	setTiltRange();
+	ActuatorEffectivenessAirship airship(nullptr);
+	declareActuators(airship);
+
+	ActuatorEffectiveness::ActuatorVector actuator_min{};
+	actuator_min.setAll(-1.f);
+	actuator_min(MOTOR_STARBOARD) = 0.f;
+	actuator_min(MOTOR_PORT) = 0.f;
+	ActuatorEffectiveness::ActuatorVector actuator_max{};
+	actuator_max.setAll(1.f);
+	actuator_max(TILT_STARBOARD) = 0.5f; // output limit: +90 deg at most
+
+	// Full reverse asks for +180 deg; the limited starboard servo stops
+	// at +90 deg and the projection must use that realized angle
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
+
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.5f);
+	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 0.f, 1e-6f);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, TiltRateLimited)
