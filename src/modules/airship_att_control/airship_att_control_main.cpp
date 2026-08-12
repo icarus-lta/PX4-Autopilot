@@ -40,7 +40,15 @@
 
 #include "airship_att_control.hpp"
 
+#include <px4_platform_common/defines.h>
+
 using namespace matrix;
+
+// NaN marks a manual channel without valid data: read it as released
+static float finiteOr(float value, float fallback)
+{
+	return PX4_ISFINITE(value) ? value : fallback;
+}
 
 ModuleBase::Descriptor AirshipAttitudeControl::desc{task_spawn, custom_command, print_usage};
 
@@ -87,11 +95,13 @@ void AirshipAttitudeControl::publishTorqueSetpoint(const hrt_abstime &timestamp_
 	v_torque_sp.timestamp = hrt_absolute_time();
 	v_torque_sp.timestamp_sample = timestamp_sample;
 
-	// zero actuators unless armed and in a manual flight mode
-	if (_vehicle_control_mode.flag_armed && _vehicle_control_mode.flag_control_manual_enabled) {
-		v_torque_sp.xyz[0] = _manual_control_setpoint.roll;
-		v_torque_sp.xyz[1] = _manual_control_setpoint.pitch;
-		v_torque_sp.xyz[2] = _manual_control_setpoint.yaw;
+	// zero actuators unless armed; the sticks stay live in every armed
+	// mode because no other module serves the airship outside manual
+	if (_vehicle_control_mode.flag_armed) {
+		v_torque_sp.xyz[0] = finiteOr(_manual_control_setpoint.roll, 0.f);
+		// Stick forward is nose down: negative pitch rotation in FRD
+		v_torque_sp.xyz[1] = -finiteOr(_manual_control_setpoint.pitch, 0.f);
+		v_torque_sp.xyz[2] = finiteOr(_manual_control_setpoint.yaw, 0.f);
 	}
 
 	_vehicle_torque_setpoint_pub.publish(v_torque_sp);
@@ -103,12 +113,13 @@ void AirshipAttitudeControl::publishThrustSetpoint(const hrt_abstime &timestamp_
 	v_thrust_sp.timestamp = hrt_absolute_time();
 	v_thrust_sp.timestamp_sample = timestamp_sample;
 
-	// zero actuators unless armed and in a manual flight mode
-	if (_vehicle_control_mode.flag_armed && _vehicle_control_mode.flag_control_manual_enabled) {
-		v_thrust_sp.xyz[0] = (_manual_control_setpoint.throttle + 1.f) * .5f;
+	// zero actuators unless armed; the sticks stay live in every armed
+	// mode because no other module serves the airship outside manual
+	if (_vehicle_control_mode.flag_armed) {
+		v_thrust_sp.xyz[0] = (finiteOr(_manual_control_setpoint.throttle, -1.f) + 1.f) * .5f;
 		// Stick forward descends: pitch drives the elevators on finned
 		// airships and vertical thrust on vectored ones.
-		v_thrust_sp.xyz[2] = _manual_control_setpoint.pitch;
+		v_thrust_sp.xyz[2] = finiteOr(_manual_control_setpoint.pitch, 0.f);
 	}
 
 	_vehicle_thrust_setpoint_pub.publish(v_thrust_sp);
