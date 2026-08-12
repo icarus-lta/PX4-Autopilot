@@ -18,11 +18,14 @@
 param set-default COM_PREARM_MODE 2
 
 # One collective thrust and tilt command with a reversible tail yaw
-# thruster; the tilt range is a placeholder pending vehicle data
+# thruster. The symmetric range keeps level thrust at servo output 0,
+# matching the original mixer calibration; the range and slew rate are
+# placeholders pending vehicle data.
 param set-default CA_AIRFRAME 16
 param set-default CA_AIRSHIP_GRP 0
 param set-default CA_AIRSHIP_TAIL 1
-param set-default CA_AIRSHIP_TLMIN 0
+param set-default CA_AIRSHIP_TLMIN -90
 param set-default CA_AIRSHIP_TLMAX 90
+param set-default CA_AIRSHIP_TLT_R 120
 
 param set-default CA_R_REV 4
