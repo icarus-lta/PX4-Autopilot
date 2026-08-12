@@ -273,6 +273,9 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 
 	setSaturationFlag(thrust_forward - 0.5f * (achieved_x[0] + achieved_x[1]),
 			  _saturation_flags.thrust_x_pos, _saturation_flags.thrust_x_neg);
+	// No actuator produces lateral force: the demand is unserved as-is
+	setSaturationFlag(control_sp(ControlAxis::THRUST_Y),
+			  _saturation_flags.thrust_y_pos, _saturation_flags.thrust_y_neg);
 	setSaturationFlag(-(thrust_up - 0.5f * (achieved_z[0] + achieved_z[1])),
 			  _saturation_flags.thrust_z_pos, _saturation_flags.thrust_z_neg);
 	setSaturationFlag(yaw - achieved_yaw, _saturation_flags.yaw_pos, _saturation_flags.yaw_neg);
@@ -353,7 +356,17 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 		status.unallocated_thrust[0] = 0.f;
 	}
 
-	status.unallocated_thrust[1] = 0.f;
+	// A lateral demand has no actuator to serve it and must not read as
+	// allocated: report it like any other unserved axis
+	if (_saturation_flags.thrust_y_pos) {
+		status.unallocated_thrust[1] = 1.f;
+
+	} else if (_saturation_flags.thrust_y_neg) {
+		status.unallocated_thrust[1] = -1.f;
+
+	} else {
+		status.unallocated_thrust[1] = 0.f;
+	}
 
 	if (_saturation_flags.thrust_z_pos) {
 		status.unallocated_thrust[2] = 1.f;

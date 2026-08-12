@@ -67,6 +67,8 @@ private:
 		bool yaw_neg;
 		bool thrust_x_pos;
 		bool thrust_x_neg;
+		bool thrust_y_pos;
+		bool thrust_y_neg;
 		bool thrust_z_pos;
 		bool thrust_z_neg;
 	};
