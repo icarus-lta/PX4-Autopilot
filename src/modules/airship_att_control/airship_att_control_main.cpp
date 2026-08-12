@@ -95,9 +95,12 @@ void AirshipAttitudeControl::publishTorqueSetpoint(const hrt_abstime &timestamp_
 	v_torque_sp.timestamp = hrt_absolute_time();
 	v_torque_sp.timestamp_sample = timestamp_sample;
 
-	// zero actuators unless armed; the sticks stay live in every armed
-	// mode because no other module serves the airship outside manual
-	if (_vehicle_control_mode.flag_armed) {
+	// zero actuators unless armed with valid manual input; the sticks
+	// stay live in every armed mode because no other module serves the
+	// airship outside manual, but lost or never-published input (which
+	// keeps its last finite values and only clears .valid) must read as
+	// released, not be flown indefinitely
+	if (_vehicle_control_mode.flag_armed && _manual_control_setpoint.valid) {
 		v_torque_sp.xyz[0] = finiteOr(_manual_control_setpoint.roll, 0.f);
 		// Stick forward is nose down: negative pitch rotation in FRD
 		v_torque_sp.xyz[1] = -finiteOr(_manual_control_setpoint.pitch, 0.f);
@@ -113,9 +116,12 @@ void AirshipAttitudeControl::publishThrustSetpoint(const hrt_abstime &timestamp_
 	v_thrust_sp.timestamp = hrt_absolute_time();
 	v_thrust_sp.timestamp_sample = timestamp_sample;
 
-	// zero actuators unless armed; the sticks stay live in every armed
-	// mode because no other module serves the airship outside manual
-	if (_vehicle_control_mode.flag_armed) {
+	// zero actuators unless armed with valid manual input; the sticks
+	// stay live in every armed mode because no other module serves the
+	// airship outside manual, but lost or never-published input (which
+	// keeps its last finite values and only clears .valid) must read as
+	// released, not be flown indefinitely
+	if (_vehicle_control_mode.flag_armed && _manual_control_setpoint.valid) {
 		v_thrust_sp.xyz[0] = (finiteOr(_manual_control_setpoint.throttle, -1.f) + 1.f) * .5f;
 		// Stick forward descends: pitch drives the elevators on finned
 		// airships and vertical thrust on vectored ones.
