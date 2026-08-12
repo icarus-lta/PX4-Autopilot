@@ -39,8 +39,10 @@ param set-default SIM_GZ_SV_MAXA1 180
 param set-default SIM_GZ_SV_MINA2 -180
 param set-default SIM_GZ_SV_MAXA2 180
 
-# Independently vectored side pods
+# Independently vectored side pods; the tilt slew rate matches the
+# hardware preset so SITL exercises the same code path
 param set-default CA_AIRFRAME 16
 param set-default CA_AIRSHIP_GRP 1
 param set-default CA_AIRSHIP_TLMIN -180
 param set-default CA_AIRSHIP_TLMAX 180
+param set-default CA_AIRSHIP_TLT_R 120
