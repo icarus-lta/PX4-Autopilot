@@ -17,9 +17,8 @@ Create a git commit in conventional-commit format: `type(scope): description`.
   `.github/workflows/` → `ci`).
 - **description:** imperative, concise, ≥5 chars.
 
-**The user is the author. Never add `Co-Authored-By` naming an AI. End the
-commit body with the disclosure trailer `Assisted-by: Claude:<model-id>`
-(e.g. `Assisted-by: Claude:claude-fable-5`).**
+**The user is the author. No AI trailers of any kind — no `Co-Authored-By`
+naming an AI, no `Assisted-by`, no "Generated with" footers (see CLAUDE.md).**
 
 ## Steps
 
