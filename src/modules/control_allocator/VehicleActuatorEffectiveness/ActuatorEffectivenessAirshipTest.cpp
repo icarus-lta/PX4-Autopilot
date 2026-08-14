@@ -57,7 +57,7 @@ static constexpr int COLLECTIVE_TILT = 2;
 static constexpr int TAIL_COLLECTIVE_TILT = 3;
 static constexpr int TAIL_COLLECTIVE_RUDDER = 5;
 
-static void setTiltRange(float tilt_min_deg = -180.f, float tilt_max_deg = 180.f)
+static void resetAirshipParams(float tilt_min_deg = -180.f, float tilt_max_deg = 180.f)
 {
 	// Disable autosaving parameters to avoid busy loop in param_set()
 	param_control_autosave(false);
@@ -70,6 +70,9 @@ static void setTiltRange(float tilt_min_deg = -180.f, float tilt_max_deg = 180.f
 	param_set(param_find("CA_AIRSHIP_TLMAX"), &tilt_max_deg);
 	int32_t surface_count = 0;
 	param_set(param_find("CA_SV_CS_COUNT"), &surface_count);
+	float surface_trim = 0.f;
+	param_set(param_find("CA_SV_CS0_TRIM"), &surface_trim);
+	param_set(param_find("CA_SV_CS1_TRIM"), &surface_trim);
 	float surface_credit = 1.f;
 	param_set(param_find("CA_AIRSHIP_CS_K"), &surface_credit);
 	float tilt_rate = 0.f;
@@ -143,7 +146,7 @@ static void runUpdateSetpoint(ActuatorEffectivenessAirship &airship, const Vecto
 
 TEST(ActuatorEffectivenessAirshipTest, VectoredConfiguration)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	ActuatorEffectiveness::Configuration configuration{};
@@ -155,7 +158,7 @@ TEST(ActuatorEffectivenessAirshipTest, VectoredConfiguration)
 
 TEST(ActuatorEffectivenessAirshipTest, ForwardCruise)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -171,7 +174,7 @@ TEST(ActuatorEffectivenessAirshipTest, ForwardCruise)
 
 TEST(ActuatorEffectivenessAirshipTest, FullYawIsTheExactCouple)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -188,7 +191,7 @@ TEST(ActuatorEffectivenessAirshipTest, FullYawIsTheExactCouple)
 
 TEST(ActuatorEffectivenessAirshipTest, VerticalClimb)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -204,7 +207,7 @@ TEST(ActuatorEffectivenessAirshipTest, VerticalClimb)
 
 TEST(ActuatorEffectivenessAirshipTest, CruiseWithYaw)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -221,7 +224,7 @@ TEST(ActuatorEffectivenessAirshipTest, CruiseWithYaw)
 
 TEST(ActuatorEffectivenessAirshipTest, SaturationClampsAndReports)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -244,7 +247,7 @@ TEST(ActuatorEffectivenessAirshipTest, SaturationClampsAndReports)
 
 TEST(ActuatorEffectivenessAirshipTest, TiltHeldThroughZeroThrust)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -263,7 +266,7 @@ TEST(ActuatorEffectivenessAirshipTest, TiltHeldThroughZeroThrust)
 
 TEST(ActuatorEffectivenessAirshipTest, MotorsStayUnidirectional)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	// The props are non-reversible: any demand, including full reverse,
@@ -278,6 +281,7 @@ TEST(ActuatorEffectivenessAirshipTest, MotorsStayUnidirectional)
 				ActuatorEffectiveness::ActuatorVector actuator_sp{};
 				runUpdateSetpoint(airship, control_sp, actuator_sp);
 
+				SCOPED_TRACE(::testing::Message() << "thrust=" << thrust << " yaw=" << yaw << " roll=" << roll);
 				EXPECT_GE(actuator_sp(MOTOR_STARBOARD), 0.f);
 				EXPECT_LE(actuator_sp(MOTOR_STARBOARD), 1.f);
 				EXPECT_GE(actuator_sp(MOTOR_PORT), 0.f);
@@ -289,7 +293,7 @@ TEST(ActuatorEffectivenessAirshipTest, MotorsStayUnidirectional)
 
 TEST(ActuatorEffectivenessAirshipTest, TiltRangeLimited)
 {
-	setTiltRange(-90.f, 90.f);
+	resetAirshipParams(-90.f, 90.f);
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -311,7 +315,7 @@ TEST(ActuatorEffectivenessAirshipTest, TiltRangeLimited)
 
 TEST(ActuatorEffectivenessAirshipTest, CollectiveModeCruiseAndClimb)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setCollectiveMode();
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -333,7 +337,7 @@ TEST(ActuatorEffectivenessAirshipTest, CollectiveModeCruiseAndClimb)
 
 TEST(ActuatorEffectivenessAirshipTest, FixedMountRejectsVertical)
 {
-	setTiltRange(0.f, 0.f);
+	resetAirshipParams(0.f, 0.f);
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -352,7 +356,7 @@ TEST(ActuatorEffectivenessAirshipTest, FixedMountRejectsVertical)
 
 TEST(ActuatorEffectivenessAirshipTest, FixedMountDifferentialYaw)
 {
-	setTiltRange(0.f, 0.f);
+	resetAirshipParams(0.f, 0.f);
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -366,7 +370,7 @@ TEST(ActuatorEffectivenessAirshipTest, FixedMountDifferentialYaw)
 
 TEST(ActuatorEffectivenessAirshipTest, CollectiveModeYawAndRollUnallocated)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setCollectiveMode();
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -396,7 +400,7 @@ TEST(ActuatorEffectivenessAirshipTest, CollectiveModeYawAndRollUnallocated)
 TEST(ActuatorEffectivenessAirshipTest, CollectiveModeHasNoDifferential)
 {
 	// Generic-airship class: fixed mounts driven by one thrust command
-	setTiltRange(0.f, 0.f);
+	resetAirshipParams(0.f, 0.f);
 	setCollectiveMode();
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -422,7 +426,7 @@ TEST(ActuatorEffectivenessAirshipTest, CollectiveModeHasNoDifferential)
 
 TEST(ActuatorEffectivenessAirshipTest, CollectiveModeReverseCruise)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setCollectiveMode();
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -439,7 +443,7 @@ TEST(ActuatorEffectivenessAirshipTest, CollectiveModeReverseCruise)
 
 TEST(ActuatorEffectivenessAirshipTest, MotorLimitRespected)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 	declareActuators(airship);
 
@@ -465,7 +469,7 @@ TEST(ActuatorEffectivenessAirshipTest, MotorLimitRespected)
 
 TEST(ActuatorEffectivenessAirshipTest, PitchTorqueUnallocated)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	// The pods cannot produce pitch torque in any mode
@@ -489,7 +493,7 @@ TEST(ActuatorEffectivenessAirshipTest, PitchTorqueUnallocated)
 
 TEST(ActuatorEffectivenessAirshipTest, TailThrusterConfiguration)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -502,7 +506,7 @@ TEST(ActuatorEffectivenessAirshipTest, TailThrusterConfiguration)
 
 TEST(ActuatorEffectivenessAirshipTest, CollectiveSingleTiltConfiguration)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setCollectiveMode();
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -525,7 +529,7 @@ TEST(ActuatorEffectivenessAirshipTest, CollectiveSingleTiltConfiguration)
 
 TEST(ActuatorEffectivenessAirshipTest, TailServesCollectiveYaw)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setCollectiveMode();
 	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
@@ -547,7 +551,7 @@ TEST(ActuatorEffectivenessAirshipTest, TailServesCollectiveYaw)
 
 TEST(ActuatorEffectivenessAirshipTest, TailReverseNeedsConfiguration)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setCollectiveMode();
 	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
@@ -579,7 +583,7 @@ TEST(ActuatorEffectivenessAirshipTest, TailReverseNeedsConfiguration)
 
 TEST(ActuatorEffectivenessAirshipTest, TailIdleWithIndependentCouple)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -598,7 +602,7 @@ TEST(ActuatorEffectivenessAirshipTest, TailIdleWithIndependentCouple)
 
 TEST(ActuatorEffectivenessAirshipTest, TailTopsUpClampedRange)
 {
-	setTiltRange(0.f, 0.f);
+	resetAirshipParams(0.f, 0.f);
 	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -621,7 +625,7 @@ TEST(ActuatorEffectivenessAirshipTest, AsymmetricTiltRange)
 {
 	// An up-only tilt range: collective mode, reversible tail thruster,
 	// 0 deg (forward) to +90 deg (up)
-	setTiltRange(0.f, 90.f);
+	resetAirshipParams(0.f, 90.f);
 	setCollectiveMode();
 	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
@@ -668,7 +672,7 @@ TEST(ActuatorEffectivenessAirshipTest, AsymmetricTiltRange)
 
 TEST(ActuatorEffectivenessAirshipTest, FixedMountConfiguration)
 {
-	setTiltRange(0.f, 0.f);
+	resetAirshipParams(0.f, 0.f);
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	// A zero tilt range allocates no tilt servos
@@ -681,7 +685,7 @@ TEST(ActuatorEffectivenessAirshipTest, FixedMountConfiguration)
 
 TEST(ActuatorEffectivenessAirshipTest, SurfaceConfiguration)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setSurfaces();
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -697,7 +701,7 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceConfiguration)
 
 TEST(ActuatorEffectivenessAirshipTest, SurfacesKeepTheirSetpoints)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setSurfaces();
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -715,7 +719,7 @@ TEST(ActuatorEffectivenessAirshipTest, SurfacesKeepTheirSetpoints)
 
 TEST(ActuatorEffectivenessAirshipTest, SurfacesServeFirst)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setSurfaces();
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -739,7 +743,7 @@ TEST(ActuatorEffectivenessAirshipTest, SurfacesServeFirst)
 
 TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditZeroPodsServeAll)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setSurfaces();
 	setSurfaceCredit(0.f);
 	ActuatorEffectivenessAirship airship(nullptr);
@@ -768,7 +772,7 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditZeroPodsServeAll)
 
 TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditSharesProportionally)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setSurfaces();
 	setSurfaceCredit(0.5f);
 	ActuatorEffectivenessAirship airship(nullptr);
@@ -793,7 +797,7 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditSharesProportionally)
 
 TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditZeroReportsHoverPitch)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setSurfaces();
 	setSurfaceCredit(0.f);
 	ActuatorEffectivenessAirship airship(nullptr);
@@ -816,7 +820,7 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditZeroReportsHoverPitch)
 
 TEST(ActuatorEffectivenessAirshipTest, PitchDeferredToSurfaces)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setSurfaces();
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -836,7 +840,7 @@ TEST(ActuatorEffectivenessAirshipTest, PitchDeferredToSurfaces)
 
 TEST(ActuatorEffectivenessAirshipTest, TailAfterSurfaces)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setCollectiveMode();
 	setTailThruster();
 	setSurfaces();
@@ -863,7 +867,7 @@ TEST(ActuatorEffectivenessAirshipTest, TailAfterSurfaces)
 
 TEST(ActuatorEffectivenessAirshipTest, SurfaceTrimNotCredited)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setSurfaces();
 	float trim = 0.2f;
 	param_set(param_find("CA_SV_CS1_TRIM"), &trim);
@@ -884,14 +888,11 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceTrimNotCredited)
 	status.unallocated_torque[2] = 1.f; // matrix residual: demand minus (rudder - trim)
 	airship.getUnallocatedControl(0, status);
 	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
-
-	trim = 0.f;
-	param_set(param_find("CA_SV_CS1_TRIM"), &trim);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, SaturatedSurfaceNotOverCredited)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setSurfaces();
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -911,7 +912,7 @@ TEST(ActuatorEffectivenessAirshipTest, SaturatedSurfaceNotOverCredited)
 
 TEST(ActuatorEffectivenessAirshipTest, NoiseBelowSteerThresholdHoldsTilt)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	// Establish a steered tilt with a full yaw couple
@@ -924,7 +925,7 @@ TEST(ActuatorEffectivenessAirshipTest, NoiseBelowSteerThresholdHoldsTilt)
 
 	// Stick noise below the steering threshold must not move the tilts,
 	// even though it exceeds the old near-zero hold bound
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.01f;
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.75f * ActuatorEffectivenessAirship::kTiltSteerRelease;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
@@ -932,7 +933,7 @@ TEST(ActuatorEffectivenessAirshipTest, NoiseBelowSteerThresholdHoldsTilt)
 
 TEST(ActuatorEffectivenessAirshipTest, SteerHysteresisBand)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	// Engage steering above the engage threshold
@@ -944,12 +945,13 @@ TEST(ActuatorEffectivenessAirshipTest, SteerHysteresisBand)
 
 	// Inside the band the last commanded direction stands: a reversed
 	// demand below the engage floor must not retarget the tilt
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = -0.015f;
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) =
+		-0.5f * (ActuatorEffectivenessAirship::kTiltSteerEngage + ActuatorEffectivenessAirship::kTiltSteerRelease);
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 
 	// Below the release threshold the hold takes over
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.005f;
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.5f * ActuatorEffectivenessAirship::kTiltSteerRelease;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 
@@ -961,7 +963,7 @@ TEST(ActuatorEffectivenessAirshipTest, SteerHysteresisBand)
 
 TEST(ActuatorEffectivenessAirshipTest, RearDemandNoiseKeepsChosenEnd)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	// A straight-back demand commits both tilts to the +180 deg end
@@ -976,7 +978,7 @@ TEST(ActuatorEffectivenessAirshipTest, RearDemandNoiseKeepsChosenEnd)
 	// Perpendicular noise flips the sign of the small fz component: the
 	// committed end must hold, not swing across the whole range
 	for (int step = -2; step <= 2; step++) {
-		control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.0025f * step;
+		control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.05f * ActuatorEffectivenessAirship::kTiltRearCone * step;
 		runUpdateSetpoint(airship, control_sp, actuator_sp);
 		EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 		EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 1.f);
@@ -985,7 +987,7 @@ TEST(ActuatorEffectivenessAirshipTest, RearDemandNoiseKeepsChosenEnd)
 
 TEST(ActuatorEffectivenessAirshipTest, SlewKeepsCommittedEnd)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setTiltRate(90.f);
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -999,17 +1001,17 @@ TEST(ActuatorEffectivenessAirshipTest, SlewKeepsCommittedEnd)
 
 	// Noise on the perpendicular axis while the servo is still slewing
 	// must not re-decide the end: the tilt keeps moving the same way
-	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.005f;
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.1f * ActuatorEffectivenessAirship::kTiltRearCone;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_GT(actuator_sp(TILT_STARBOARD), first);
-	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = -0.005f;
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = -0.1f * ActuatorEffectivenessAirship::kTiltRearCone;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_GT(actuator_sp(TILT_STARBOARD), first);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, TiltServoLimitBoundsProjection)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 	declareActuators(airship);
 
@@ -1038,7 +1040,7 @@ TEST(ActuatorEffectivenessAirshipTest, CloudshipMirrorSymmetricTilt)
 {
 	// Mirror of the Cloudship preset: collective mode, reversible tail
 	// thruster, symmetric tilt range -90..+90 deg (level = servo 0)
-	setTiltRange(-90.f, 90.f);
+	resetAirshipParams(-90.f, 90.f);
 	setCollectiveMode();
 	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
@@ -1071,7 +1073,7 @@ TEST(ActuatorEffectivenessAirshipTest, RearAnchorPicksReachableEnd)
 {
 	// Down-only range: straight back is realizable only at -180 deg,
 	// so the anchor must not commit to the unreachable +180 end
-	setTiltRange(-180.f, 0.f);
+	resetAirshipParams(-180.f, 0.f);
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	Vector<float, 6> control_sp{};
@@ -1087,7 +1089,7 @@ TEST(ActuatorEffectivenessAirshipTest, RearAnchorPicksReachableEnd)
 
 TEST(ActuatorEffectivenessAirshipTest, NegativeEndCommitmentHeld)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	// A down-and-back demand commits the starboard tilt to the negative
@@ -1101,17 +1103,17 @@ TEST(ActuatorEffectivenessAirshipTest, NegativeEndCommitmentHeld)
 
 	// Straight back inside the cone must hold the -180 end, whichever
 	// way the perpendicular noise points
-	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.005f;
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.1f * ActuatorEffectivenessAirship::kTiltRearCone;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), -1.f);
-	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = -0.005f;
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = -0.1f * ActuatorEffectivenessAirship::kTiltRearCone;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), -1.f);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, CollectiveClampedServoRealizedCopy)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setCollectiveMode();
 	ActuatorEffectivenessAirship airship(nullptr);
 	declareActuators(airship);
@@ -1138,7 +1140,7 @@ TEST(ActuatorEffectivenessAirshipTest, CollectiveClampedServoRealizedCopy)
 
 TEST(ActuatorEffectivenessAirshipTest, TiltRateLimited)
 {
-	setTiltRange();
+	resetAirshipParams();
 	setTiltRate(90.f);
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -1160,7 +1162,7 @@ TEST(ActuatorEffectivenessAirshipTest, TiltRateLimited)
 
 TEST(ActuatorEffectivenessAirshipTest, DisarmParksTiltLevel)
 {
-	setTiltRange();
+	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	// Armed (default without an actuator_armed sample): full yaw couple
@@ -1170,20 +1172,27 @@ TEST(ActuatorEffectivenessAirshipTest, DisarmParksTiltLevel)
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 
+	// Restore the armed baseline for later tests even on an early failure:
+	// the armed state is a persistent uORB sample, not a parameter
+	struct ArmedRestore {
+		uORB::Publication<actuator_armed_s> pub{ORB_ID(actuator_armed)};
+		~ArmedRestore()
+		{
+			actuator_armed_s armed{};
+			armed.timestamp = hrt_absolute_time();
+			armed.armed = true;
+			pub.publish(armed);
+		}
+	} armed_restore;
+
 	// Disarmed, the tilt parks level regardless of the demand and the
 	// reverse projection clamps the motor off
-	uORB::Publication<actuator_armed_s> armed_pub{ORB_ID(actuator_armed)};
 	actuator_armed_s armed{};
 	armed.timestamp = hrt_absolute_time();
 	armed.armed = false;
-	armed_pub.publish(armed);
+	armed_restore.pub.publish(armed);
 
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f); // parked at 0 deg, forward
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
-
-	// Restore the armed state for any test that runs after this one
-	armed.timestamp = hrt_absolute_time();
-	armed.armed = true;
-	armed_pub.publish(armed);
 }

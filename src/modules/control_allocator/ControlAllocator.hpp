@@ -177,7 +177,7 @@ private:
 		HELICOPTER_COAXIAL = 12,
 		ROVER_MECANUM = 13,
 		SPACECRAFT_2D = 14,
-		AIRSHIP = 16,
+		AIRSHIP = 16, // 15 was Spacecraft 3D: removed from this enum, value still reserved in module.yaml
 	};
 
 	enum class FailureMode {
