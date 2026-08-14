@@ -1,12 +1,12 @@
 px4_add_library(VehicleActuatorEffectiveness
 	ActuatorEffectivenessUUV.cpp
 	ActuatorEffectivenessUUV.hpp
+	ActuatorEffectivenessAirship.cpp
+	ActuatorEffectivenessAirship.hpp
 	ActuatorEffectivenessControlSurfaces.cpp
 	ActuatorEffectivenessControlSurfaces.hpp
 	ActuatorEffectivenessCustom.cpp
 	ActuatorEffectivenessCustom.hpp
-	ActuatorEffectivenessAirship.cpp
-	ActuatorEffectivenessAirship.hpp
 	ActuatorEffectivenessFixedWing.cpp
 	ActuatorEffectivenessFixedWing.hpp
 	ActuatorEffectivenessHelicopter.cpp

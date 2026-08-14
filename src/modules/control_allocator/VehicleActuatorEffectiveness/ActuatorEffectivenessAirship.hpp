@@ -37,6 +37,7 @@
 #include "ActuatorEffectivenessControlSurfaces.hpp"
 
 #include <drivers/drv_hrt.h>
+#include <lib/slew_rate/SlewRate.hpp>
 #include <px4_platform_common/module_params.h>
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/actuator_armed.h>
@@ -57,6 +58,20 @@ public:
 
 	const char *name() const override { return "Airship"; }
 
+	// The tilt direction is the atan2 of the pod force demand, which is
+	// meaningless near zero magnitude: stick noise alone would slam the tilt
+	// between opposite directions. Steering therefore engages only above the
+	// stick-noise floor and releases at half of it; inside the band the last
+	// commanded direction stands, so a sign reversal there cannot retarget.
+	static constexpr float kTiltSteerEngage = 0.02f;
+	static constexpr float kTiltSteerRelease = 0.01f;
+
+	// Pointing (near-)straight back, +180 and -180 deg realize the same thrust
+	// direction at opposite ends of an end-stop servo: within this cone of the
+	// negative x axis the previously committed end is kept, so perpendicular
+	// noise cannot command a full-range sweep.
+	static constexpr float kTiltRearCone = 0.05f;
+
 private:
 	struct SaturationFlags {
 		bool roll_pos;
@@ -76,7 +91,7 @@ private:
 
 	SaturationFlags _saturation_flags{};
 
-	float _tilt[2] {};		///< realized tilt [rad], held through zero-thrust
+	SlewRate<float> _tilt[2] {};	///< realized tilt [rad], held through zero-thrust
 	float _tilt_target[2] {};	///< commanded tilt [rad] the slew tracks; holds through the hysteresis band
 	bool _tilt_steering[2] {};	///< per-pod hysteresis state of the direction hold
 	bool _armed{true};		///< assume armed until actuator_armed reports otherwise
@@ -88,15 +103,13 @@ private:
 
 	// Actuator layout, decided when the actuators are declared
 	int _first_control_surface_idx{0};
-	int _first_tilt_idx{2};
+	int _first_tilt_idx{0};
 	int _tilt_count{0};
 	bool _has_tail{false};
 	bool _independent{false};
 
 	bool _surface_serves[3] {};	///< torque axes with control-surface effectiveness
-	float _surface_roll{0.f};	///< torque the matrix allocated to the surfaces
-	float _surface_pitch{0.f};
-	float _surface_yaw{0.f};
+	matrix::Vector3f _surface_torque{};	///< torque the clipped, trim-relative surface deflections can deliver
 	float _achieved_roll{0.f};
 	float _achieved_yaw{0.f};
 
