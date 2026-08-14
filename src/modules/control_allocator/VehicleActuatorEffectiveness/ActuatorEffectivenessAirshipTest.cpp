@@ -368,6 +368,36 @@ TEST(ActuatorEffectivenessAirshipTest, FixedMountDifferentialYaw)
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
 }
 
+TEST(ActuatorEffectivenessAirshipTest, FixedMountAtAngleServesVertical)
+{
+	// TLMIN = TLMAX = 90 is outside the declared parameter ranges, but
+	// nothing prevents it in storage: the empty range must degrade to a
+	// fixed mount at that angle, projecting the demand onto it
+	resetAirshipParams(90.f, 90.f);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	ActuatorEffectiveness::Configuration configuration{};
+	EXPECT_TRUE(airship.getEffectivenessMatrix(configuration, EffectivenessUpdateReason::MOTOR_ACTIVATION_UPDATE));
+	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::SERVOS], 0);
+
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = -1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
+
+	// Forward demand has no component along the up-fixed mount
+	control_sp.setZero();
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = 0.5f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 0.f, 1e-6f);
+
+	control_allocator_status_s status{};
+	airship.getUnallocatedControl(0, status);
+	EXPECT_FLOAT_EQ(status.unallocated_thrust[0], 1.f);
+}
+
 TEST(ActuatorEffectivenessAirshipTest, CollectiveModeYawAndRollUnallocated)
 {
 	resetAirshipParams();
@@ -489,6 +519,30 @@ TEST(ActuatorEffectivenessAirshipTest, PitchTorqueUnallocated)
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	airship.getUnallocatedControl(0, status);
 	EXPECT_FLOAT_EQ(status.unallocated_torque[1], -1.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, LateralThrustReportedUnserved)
+{
+	resetAirshipParams();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// No airship actuator produces lateral force: the demand must be
+	// reported unserved, not silently read as allocated
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Y) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
+
+	control_allocator_status_s status{};
+	airship.getUnallocatedControl(0, status);
+	EXPECT_FLOAT_EQ(status.unallocated_thrust[1], 1.f);
+
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Y) = -1.f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	airship.getUnallocatedControl(0, status);
+	EXPECT_FLOAT_EQ(status.unallocated_thrust[1], -1.f);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, TailThrusterConfiguration)
@@ -795,6 +849,39 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditSharesProportionally)
 	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
 }
 
+TEST(ActuatorEffectivenessAirshipTest, RollSurfaceCreditedAgainstDifferentialRoll)
+{
+	resetAirshipParams();
+	int32_t surface_count = 1;
+	param_set(param_find("CA_SV_CS_COUNT"), &surface_count);
+	int32_t aileron = 1;
+	param_set(param_find("CA_SV_CS0_TYPE"), &aileron);
+	float roll_torque = 1.f;
+	param_set(param_find("CA_SV_CS0_TRQ_R"), &roll_torque);
+	float no_pitch = 0.f; // persists at 1 from setSurfaces() in earlier tests
+	param_set(param_find("CA_SV_CS0_TRQ_P"), &no_pitch);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// The aileron carries 0.6 of the roll demand from the matrix pass;
+	// the pods serve the remaining 0.4 differentially, straight up and
+	// down, and the report is exact
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	actuator_sp(SURFACE_ELEVATOR) = 0.6f; // first surface slot
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.4f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.4f);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), -0.5f); // -90 deg, down
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.5f);       // +90 deg, up
+
+	control_allocator_status_s status{};
+	status.unallocated_torque[0] = 0.4f; // matrix residual: demand minus aileron
+	airship.getUnallocatedControl(0, status);
+	EXPECT_NEAR(status.unallocated_torque[0], 0.f, 1e-6f);
+}
+
 TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditZeroReportsHoverPitch)
 {
 	resetAirshipParams();
@@ -961,6 +1048,31 @@ TEST(ActuatorEffectivenessAirshipTest, SteerHysteresisBand)
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
 }
 
+TEST(ActuatorEffectivenessAirshipTest, NanDemandDoesNotCorruptTiltState)
+{
+	resetAirshipParams();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// Commit the starboard tilt to the +180 deg end
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
+
+	// A NaN sample fails every steering comparison and must fall into the
+	// hold branch, leaving the persistent tilt state finite
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = NAN;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_TRUE(PX4_ISFINITE(actuator_sp(TILT_STARBOARD)));
+
+	// The original demand behaves as if the NaN never happened
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = 0.f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
+}
+
 TEST(ActuatorEffectivenessAirshipTest, RearDemandNoiseKeepsChosenEnd)
 {
 	resetAirshipParams();
@@ -1085,6 +1197,40 @@ TEST(ActuatorEffectivenessAirshipTest, RearAnchorPicksReachableEnd)
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), -1.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, TiltRangeNarrowedAtRuntimeReclampsHeldTilt)
+{
+	resetAirshipParams();
+
+	// updateParams() is protected: expose it to simulate the allocator's
+	// parameter-update path at runtime
+	struct AirshipUnderTest : ActuatorEffectivenessAirship {
+		using ActuatorEffectivenessAirship::ActuatorEffectivenessAirship;
+		using ActuatorEffectivenessAirship::updateParams;
+	} airship{nullptr};
+
+	// Commit to the +180 deg end with the full default range
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
+
+	// Collapse the range to a forward fixed mount mid-flight: the held
+	// 180 deg state must be pulled into the new range, so a demand below
+	// the steering threshold projects onto 0 deg, not onto a stale angle
+	// no servo write-back can correct (no tilt servo exists any more)
+	float zero = 0.f;
+	param_set(param_find("CA_AIRSHIP_TLMIN"), &zero);
+	param_set(param_find("CA_AIRSHIP_TLMAX"), &zero);
+	airship.updateParams();
+
+	const float below_release = 0.5f * ActuatorEffectivenessAirship::kTiltSteerRelease;
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = below_release;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), below_release);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), below_release);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, RestrictedRangeRearDemandPicksRealizingEnd)
