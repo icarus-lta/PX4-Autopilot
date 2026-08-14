@@ -173,12 +173,17 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 			_tilt_steering[i] = true;
 			float tilt = atan2f(fz[i], fx[i]);
 
+			// Reaching the opposite range end costs a full sweep of an
+			// end-stop servo, so end selection is sticky: noise-sized
+			// advantages must not retarget across the range.
+			const float commit_margin = fmaxf(kTiltRearCone * magnitude, kTiltSteerRelease);
+
 			// A (near-)straight-back demand is realizable at either end
 			// of the range: pick the end that realizes it best, and on a
 			// tie keep the end already committed to, so noise on the
 			// perpendicular axis cannot flip the target across the
-			// range. The cone floor covers stick noise at low demand.
-			if (fx[i] < 0.f && fabsf(fz[i]) < fmaxf(kTiltRearCone * magnitude, kTiltSteerRelease)) {
+			// range. The margin floor covers stick noise at low demand.
+			if (fx[i] < 0.f && fabsf(fz[i]) < commit_margin) {
 				const float rear_hi = math::constrain(M_PI_F, tilt_min, tilt_max);
 				const float rear_lo = math::constrain(-M_PI_F, tilt_min, tilt_max);
 
@@ -189,6 +194,24 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 					tilt = _tilt_target[i] >= 0.f ? rear_hi : rear_lo;
 				}
 
+			} else if (tilt < tilt_min || tilt > tilt_max) {
+				// The tilt is circular but the range is a segment: for a
+				// target outside it, the numerically nearer bound can
+				// point away from the demand entirely (e.g. range
+				// -180..0, demand back and slightly up). Choose the end
+				// that realizes more of the demand, floored at zero
+				// since the motors cannot reverse, and switch ends only
+				// past the commitment margin.
+				const float p_hi = fmaxf(0.f, fx[i] * cosf(tilt_max) + fz[i] * sinf(tilt_max));
+				const float p_lo = fmaxf(0.f, fx[i] * cosf(tilt_min) + fz[i] * sinf(tilt_min));
+				const bool committed_hi = _tilt_target[i] - tilt_min > tilt_max - _tilt_target[i];
+
+				if (committed_hi) {
+					tilt = p_lo > p_hi + commit_margin ? tilt_min : tilt_max;
+
+				} else {
+					tilt = p_hi > p_lo + commit_margin ? tilt_max : tilt_min;
+				}
 			}
 
 			_tilt_target[i] = math::constrain(tilt, tilt_min, tilt_max);
