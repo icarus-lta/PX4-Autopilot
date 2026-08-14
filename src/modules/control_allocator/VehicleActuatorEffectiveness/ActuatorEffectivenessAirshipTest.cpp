@@ -1087,6 +1087,58 @@ TEST(ActuatorEffectivenessAirshipTest, RearAnchorPicksReachableEnd)
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
 }
 
+TEST(ActuatorEffectivenessAirshipTest, RestrictedRangeRearDemandPicksRealizingEnd)
+{
+	// Down-only range with a back-and-up demand OUTSIDE the rear cone:
+	// the atan2 target (+169 deg) is out of range, and the numerically
+	// nearer bound (0 deg, forward) realizes none of it. The -180 end
+	// must be chosen: full reverse thrust, only the up share unmet.
+	resetAirshipParams(-180.f, 0.f);
+	setCollectiveMode();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = -0.2f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+
+	EXPECT_FLOAT_EQ(actuator_sp(COLLECTIVE_TILT), -1.f); // -180 deg
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
+
+	control_allocator_status_s status{};
+	airship.getUnallocatedControl(0, status);
+	EXPECT_FLOAT_EQ(status.unallocated_thrust[0], 0.f);
+	EXPECT_FLOAT_EQ(status.unallocated_thrust[2], -1.f); // the up share is unreachable
+}
+
+TEST(ActuatorEffectivenessAirshipTest, RearConeBoundaryKeepsCommittedEnd)
+{
+	// Crossing the rear-cone boundary must not change the committed end:
+	// inside the cone the anchor holds it, and outside the out-of-range
+	// end selection must agree, so the boundary itself cannot retarget
+	resetAirshipParams(-180.f, 0.f);
+	setCollectiveMode();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// Commit straight back to the only realizing end, -180 deg
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(COLLECTIVE_TILT), -1.f);
+
+	// Step the perpendicular component from inside the cone to outside
+	for (int step = 0; step <= 3; step++) {
+		SCOPED_TRACE(::testing::Message() << "step=" << step);
+		control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) =
+			-0.4f * ActuatorEffectivenessAirship::kTiltRearCone * step;
+		runUpdateSetpoint(airship, control_sp, actuator_sp);
+		EXPECT_FLOAT_EQ(actuator_sp(COLLECTIVE_TILT), -1.f);
+	}
+}
+
 TEST(ActuatorEffectivenessAirshipTest, NegativeEndCommitmentHeld)
 {
 	resetAirshipParams();
