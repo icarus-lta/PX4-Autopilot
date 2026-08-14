@@ -37,98 +37,6 @@ parameters:
                 16: Airship
             default: 0
 
-        CA_AIRSHIP_GRP:
-            description:
-                short: Airship propulsor command mode
-                long: |
-                  Collective drives both pods with one thrust command and one
-                  tilt command on a single tilt servo; there is no
-                  differential thrust, and yaw and roll are reported as
-                  unallocated. Independent gives each pod its own thrust and
-                  tilt command on its own tilt servo. A zero tilt range fixes
-                  the thrust axes and allocates no tilt servos. Pitch torque
-                  is not produced by the pods and is reported as unallocated.
-                  Control surfaces (CA_SV_CS*) are allocated by the
-                  effectiveness matrix; the pods and the tail serve the
-                  demand they leave unmet.
-            type: enum
-            values:
-                0: Collective
-                1: Independent
-            default: 0
-
-        CA_AIRSHIP_TAIL:
-            description:
-                short: Airship tail yaw thruster
-                long: |
-                  Add a tail yaw thruster as motor 3. It serves the yaw
-                  demand that the pods and control surfaces leave unmet;
-                  configure it as reversible for yaw authority in both
-                  directions.
-            type: boolean
-            default: 0
-
-        CA_AIRSHIP_TLMIN:
-            description:
-                short: Airship tilt angle at minimum servo output
-                long: |
-                  Pod tilt angle when the tilt servo output is at its minimum.
-                  Zero is thrust forward, positive tilts the thrust up.
-            type: float
-            decimal: 0
-            unit: 'deg'
-            min: -180.0
-            max: 0.0
-            default: 0.0
-
-        CA_AIRSHIP_TLMAX:
-            description:
-                short: Airship tilt angle at maximum servo output
-                long: |
-                  Pod tilt angle when the tilt servo output is at its maximum.
-                  Zero is thrust forward, positive tilts the thrust up.
-            type: float
-            decimal: 0
-            unit: 'deg'
-            min: 0.0
-            max: 180.0
-            default: 0.0
-
-        CA_AIRSHIP_TLT_R:
-            description:
-                short: Airship tilt slew rate limit
-                long: |
-                  Maximum rate of the commanded pod tilt angle. The tilt is
-                  a physical servo state: limiting its rate prevents the
-                  allocation from commanding instantaneous direction jumps.
-                  Zero disables the limit. Configure tilt slewing here, not
-                  with CA_SVn_SLEW: the generic slew runs after the airship
-                  model and would desync the thrust projection from the
-                  actual servo position.
-            type: float
-            decimal: 0
-            unit: 'deg/s'
-            min: 0.0
-            max: 720.0
-            default: 0.0
-
-        CA_AIRSHIP_CS_K:
-            description:
-                short: Airship control-surface torque credit
-                long: |
-                  Fraction of the control-surface torque allocation that is
-                  trusted to be aerodynamically delivered; the pods and the
-                  tail serve the rest of the demand. At 1 the surfaces serve
-                  their axes alone. At 0 they still deflect, but the
-                  propulsors serve the whole demand, which restores yaw
-                  authority in hover, where still-air surfaces produce no
-                  torque.
-            type: float
-            decimal: 2
-            min: 0.0
-            max: 1.0
-            default: 1.0
-
         CA_METHOD:
             description:
                 short: Control allocation method
@@ -711,6 +619,99 @@ parameters:
           min: 0
           max: 75
           default: 0.0
+
+        # airship
+        CA_AIRSHIP_GRP:
+            description:
+                short: Airship propulsor grouping
+                long: |
+                  Collective drives both pods with one thrust command and one
+                  tilt command on a single tilt servo; there is no
+                  differential thrust, and yaw and roll are reported as
+                  unallocated. Independent gives each pod its own thrust and
+                  tilt command on its own tilt servo. Pitch torque is not
+                  produced by the pods and is reported as unallocated.
+            type: enum
+            values:
+                0: Collective
+                1: Independent
+            default: 0
+
+        CA_AIRSHIP_TAIL:
+            description:
+                short: Airship tail yaw thruster
+                long: |
+                  Add a tail yaw thruster as motor 3. It serves the yaw
+                  demand that the pods and control surfaces leave unmet;
+                  configure it as reversible for yaw authority in both
+                  directions.
+            type: boolean
+            default: 0
+
+        CA_AIRSHIP_TLMIN:
+            description:
+                short: Airship tilt angle at minimum servo output
+                long: |
+                  Pod tilt angle when the tilt servo output is at its minimum.
+                  Zero is thrust forward, positive tilts the thrust up.
+                  An empty range (CA_AIRSHIP_TLMIN equal to CA_AIRSHIP_TLMAX)
+                  fixes the pods at that angle and allocates no tilt servos.
+            type: float
+            decimal: 0
+            unit: 'deg'
+            min: -180.0
+            max: 0.0
+            default: 0.0
+
+        CA_AIRSHIP_TLMAX:
+            description:
+                short: Airship tilt angle at maximum servo output
+                long: |
+                  Pod tilt angle when the tilt servo output is at its maximum.
+                  Zero is thrust forward, positive tilts the thrust up.
+                  An empty range (CA_AIRSHIP_TLMIN equal to CA_AIRSHIP_TLMAX)
+                  fixes the pods at that angle and allocates no tilt servos.
+            type: float
+            decimal: 0
+            unit: 'deg'
+            min: 0.0
+            max: 180.0
+            default: 0.0
+
+        CA_AIRSHIP_TLT_R:
+            description:
+                short: Airship tilt slew rate limit
+                long: |
+                  Maximum rate of the commanded pod tilt angle. The tilt is
+                  a physical servo state: limiting its rate prevents the
+                  allocation from commanding instantaneous direction jumps.
+                  Zero disables the limit. Configure tilt slewing here, not
+                  with CA_SVn_SLEW: the generic slew runs after the airship
+                  model and would desync the thrust projection from the
+                  actual servo position.
+            type: float
+            decimal: 0
+            unit: 'deg/s'
+            min: 0.0
+            max: 720.0
+            default: 0.0
+
+        CA_AIRSHIP_CS_K:
+            description:
+                short: Airship control-surface torque credit
+                long: |
+                  Fraction of the control-surface torque allocation that is
+                  trusted to be aerodynamically delivered; the pods and the
+                  tail serve the rest of the demand. At 1 the surfaces serve
+                  their axes alone. At 0 they still deflect, but the
+                  propulsors serve the whole demand, which restores yaw
+                  authority in hover, where still-air surfaces produce no
+                  torque.
+            type: float
+            decimal: 2
+            min: 0.0
+            max: 1.0
+            default: 1.0
 
         # Others
         CA_FAILURE_MODE:
@@ -1402,3 +1403,48 @@ mixer:
                             function: 'axisz'
                           - name: 'CA_ROTOR${i}_CT'
                             label: "Thrust\nCoefficient"
+
+            16: # Airship
+                actuators:
+                  - actuator_type: 'motor'
+                    count: 2
+                    item_label_prefix: ['Starboard Pod Motor', 'Port Pod Motor']
+                  - actuator_type: 'motor'
+                    group_label: 'Tail Yaw Thruster'
+                    count: 'CA_AIRSHIP_TAIL'
+                  - actuator_type: 'servo'
+                    group_label: 'Pod Tilt Servos'
+                    count: 2
+                    parameters:
+                      - label: 'Propulsor command mode'
+                        name: CA_AIRSHIP_GRP
+                      - label: 'Tail yaw thruster'
+                        name: CA_AIRSHIP_TAIL
+                      - label: 'Tilt angle at minimum servo output'
+                        name: CA_AIRSHIP_TLMIN
+                      - label: 'Tilt angle at maximum servo output'
+                        name: CA_AIRSHIP_TLMAX
+                      - label: 'Tilt slew rate limit'
+                        name: CA_AIRSHIP_TLT_R
+                      - label: 'Control-surface torque credit'
+                        name: CA_AIRSHIP_CS_K
+                  - actuator_type: 'servo'
+                    group_label: 'Control Surfaces'
+                    count: 'CA_SV_CS_COUNT'
+                    per_item_parameters:
+                        extra:
+                          - name: 'CA_SV_CS${i}_TYPE'
+                            label: 'Type'
+                            function: 'type'
+                            identifier: 'servo-type'
+                          - name: 'CA_SV_CS${i}_TRQ_R'
+                            label: 'Roll Torque'
+                            identifier: 'servo-torque-roll'
+                          - name: 'CA_SV_CS${i}_TRQ_P'
+                            label: 'Pitch Torque'
+                            identifier: 'servo-torque-pitch'
+                          - name: 'CA_SV_CS${i}_TRQ_Y'
+                            label: 'Yaw Torque'
+                            identifier: 'servo-torque-yaw'
+                          - name: 'CA_SV_CS${i}_TRIM'
+                            label: 'Trim'
