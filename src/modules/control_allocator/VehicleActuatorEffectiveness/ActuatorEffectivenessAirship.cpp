@@ -33,25 +33,11 @@
 
 #include "ActuatorEffectivenessAirship.hpp"
 
-#include <mathlib/mathlib.h>
+#include <lib/mathlib/mathlib.h>
 
 #include <float.h>
 
 using namespace matrix;
-
-// The tilt direction is the atan2 of the pod force demand, which is
-// meaningless near zero magnitude: stick noise alone would slam the tilt
-// between opposite directions. Steering therefore engages only above the
-// stick-noise floor and releases at half of it; inside the band the last
-// commanded direction stands, so a sign reversal there cannot retarget.
-static constexpr float kTiltSteerEngage = 0.02f;
-static constexpr float kTiltSteerRelease = 0.01f;
-
-// Pointing (near-)straight back, +180 and -180 deg realize the same thrust
-// direction at opposite ends of an end-stop servo: within this cone of the
-// negative x axis the previously committed end is kept, so perpendicular
-// noise cannot command a full-range sweep.
-static constexpr float kTiltRearCone = 0.05f;
 
 // One guard, in radians, for declaring the tilt servos and writing them
 static constexpr float kMinTiltSpan = 1e-3f;
@@ -121,9 +107,7 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	// serve the demand they leave unmet. The surface torque is credited
 	// only by CA_AIRSHIP_CS_K: still-air surfaces deliver none of their
 	// allocation, so at low credit the propulsors serve it instead.
-	float surface_roll = 0.f;
-	float surface_pitch = 0.f;
-	float surface_yaw = 0.f;
+	Vector3f surface_torque{};
 
 	for (int i = 0; i < _control_surfaces.count(); i++) {
 		const int idx = _first_control_surface_idx + i;
@@ -136,20 +120,15 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		// and stays invisible to the credit.
 		const float deflection = math::constrain(actuator_sp(idx), actuator_min(idx), actuator_max(idx))
 					 - _control_surfaces.config(i).trim;
-		const Vector3f &torque = _control_surfaces.config(i).torque;
-		surface_roll += torque(0) * deflection;
-		surface_pitch += torque(1) * deflection;
-		surface_yaw += torque(2) * deflection;
+		surface_torque += _control_surfaces.config(i).torque * deflection;
 	}
 
-	_surface_roll = surface_roll;
-	_surface_pitch = surface_pitch;
-	_surface_yaw = surface_yaw;
+	_surface_torque = surface_torque;
 
 	const float credit = _param_ca_airship_cs_k.get();
 
-	const float yaw = control_sp(ControlAxis::YAW) - credit * surface_yaw;
-	const float roll = control_sp(ControlAxis::ROLL) - credit * surface_roll;
+	const float yaw = control_sp(ControlAxis::YAW) - credit * surface_torque(2);
+	const float roll = control_sp(ControlAxis::ROLL) - credit * surface_torque(0);
 
 	const float tilt_min = math::radians(_param_ca_airship_tlmin.get());
 	const float tilt_max = math::radians(_param_ca_airship_tlmax.get());
@@ -164,12 +143,10 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		fz[0] = fz[1] = thrust_up;
 	}
 
-	if (_actuator_armed_sub.updated()) {
-		actuator_armed_s armed;
+	actuator_armed_s armed;
 
-		if (_actuator_armed_sub.copy(&armed)) {
-			_armed = armed.armed;
-		}
+	if (_actuator_armed_sub.update(&armed)) {
+		_armed = armed.armed;
 	}
 
 	// The dt floor matches the allocator's scheduling clamp so fast gyro
@@ -182,7 +159,7 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	for (int i = 0; i < 2; i++) {
 		// The range params may have narrowed at runtime: pull the held
 		// state back in before anything uses it
-		_tilt[i] = math::constrain(_tilt[i], tilt_min, tilt_max);
+		_tilt[i].setForcedValue(math::constrain(_tilt[i].getState(), tilt_min, tilt_max));
 		_tilt_target[i] = math::constrain(_tilt_target[i], tilt_min, tilt_max);
 
 		const float magnitude = sqrtf(fx[i] * fx[i] + fz[i] * fz[i]);
@@ -211,6 +188,7 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 				} else {
 					tilt = _tilt_target[i] >= 0.f ? rear_hi : rear_lo;
 				}
+
 			}
 
 			_tilt_target[i] = math::constrain(tilt, tilt_min, tilt_max);
@@ -219,16 +197,16 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 			// Released below the band: hold the tilt where it is. Inside
 			// the band the engaged target stands unchanged.
 			_tilt_steering[i] = false;
-			_tilt_target[i] = _tilt[i];
+			_tilt_target[i] = _tilt[i].getState();
 		}
 
 		// The tilt is a physical state: rate-limit it toward the target
 		if (_param_ca_airship_tlt_r.get() > 0.f) {
-			const float max_step = math::radians(_param_ca_airship_tlt_r.get()) * dt;
-			_tilt[i] += math::constrain(_tilt_target[i] - _tilt[i], -max_step, max_step);
+			_tilt[i].setSlewRate(math::radians(_param_ca_airship_tlt_r.get()));
+			_tilt[i].update(_tilt_target[i], dt);
 
 		} else {
-			_tilt[i] = _tilt_target[i];
+			_tilt[i].setForcedValue(_tilt_target[i]);
 		}
 	}
 
@@ -240,14 +218,14 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	if (_tilt_count > 0 && tilt_span > kMinTiltSpan) {
 		for (int i = 0; i < _tilt_count; i++) {
 			const int idx = _first_tilt_idx + i;
-			const float tilt_sp = -1.f + 2.f * (_tilt[i] - tilt_min) / tilt_span;
+			const float tilt_sp = -1.f + 2.f * (_tilt[i].getState() - tilt_min) / tilt_span;
 			actuator_sp(idx) = math::constrain(tilt_sp, actuator_min(idx), actuator_max(idx));
-			_tilt[i] = tilt_min + (actuator_sp(idx) + 1.f) * 0.5f * tilt_span;
+			_tilt[i].setForcedValue(tilt_min + (actuator_sp(idx) + 1.f) * 0.5f * tilt_span);
 		}
 
 		if (!_independent) {
 			// The single collective servo drives both pods
-			_tilt[1] = _tilt[0];
+			_tilt[1].setForcedValue(_tilt[0].getState());
 		}
 	}
 
@@ -256,8 +234,8 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	float sin_tilt[2];
 
 	for (int i = 0; i < 2; i++) {
-		cos_tilt[i] = cosf(_tilt[i]);
-		sin_tilt[i] = sinf(_tilt[i]);
+		cos_tilt[i] = cosf(_tilt[i].getState());
+		sin_tilt[i] = sinf(_tilt[i].getState());
 
 		// Project the demand onto the realized tilt: the feasible
 		// component when the tilt is clamped, fixed or still slewing.
@@ -322,7 +300,7 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 	const float uncredited = 1.f - _param_ca_airship_cs_k.get();
 
 	if (_surface_serves[0]) {
-		status.unallocated_torque[0] += uncredited * _surface_roll - _achieved_roll;
+		status.unallocated_torque[0] += uncredited * _surface_torque(0) - _achieved_roll;
 
 	} else if (_saturation_flags.roll_pos) {
 		status.unallocated_torque[0] = 1.f;
@@ -336,7 +314,7 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 
 	if (_surface_serves[1]) {
 		// The pods produce no pitch torque: the credited residual stands
-		status.unallocated_torque[1] += uncredited * _surface_pitch;
+		status.unallocated_torque[1] += uncredited * _surface_torque(1);
 
 	} else if (_saturation_flags.pitch_pos) {
 		status.unallocated_torque[1] = 1.f;
@@ -349,7 +327,7 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 	}
 
 	if (_surface_serves[2]) {
-		status.unallocated_torque[2] += uncredited * _surface_yaw - _achieved_yaw;
+		status.unallocated_torque[2] += uncredited * _surface_torque(2) - _achieved_yaw;
 
 	} else if (_saturation_flags.yaw_pos) {
 		status.unallocated_torque[2] = 1.f;
