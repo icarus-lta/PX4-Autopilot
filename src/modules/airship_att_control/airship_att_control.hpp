@@ -81,6 +81,12 @@ private:
 	void publishTorqueSetpoint(const hrt_abstime &timestamp_sample);
 	void publishThrustSetpoint(const hrt_abstime &timestamp_sample);
 
+	// The sticks stay live in every armed mode because no other module
+	// serves the airship outside manual, but lost or never-published input
+	// (which keeps its last finite values and only clears .valid) must
+	// read as released, not be flown indefinitely.
+	bool manualInputUsable() const { return _vehicle_control_mode.flag_armed && _manual_control_setpoint.valid; }
+
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	uORB::Subscription _vehicle_control_mode_sub{ORB_ID(vehicle_control_mode)};
 	uORB::Subscription _manual_control_setpoint_sub{ORB_ID(manual_control_setpoint)};
