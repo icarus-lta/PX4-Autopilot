@@ -33,6 +33,10 @@
 
 #include "FakeGps.hpp"
 
+#include <px4_platform_common/getopt.h>
+
+#include <cstdlib>
+
 using namespace time_literals;
 
 ModuleBase::Descriptor FakeGps::desc{task_spawn, custom_command, print_usage};
@@ -74,11 +78,11 @@ void FakeGps::Run()
 	sensor_gps.vdop = 1.3300f;
 	sensor_gps.noise_per_ms = 101;
 	sensor_gps.jamming_indicator = 35;
-	sensor_gps.vel_m_s = 0.0420f;
-	sensor_gps.vel_n_m_s = 0.0370f;
-	sensor_gps.vel_e_m_s = 0.0200f;
-	sensor_gps.vel_d_m_s = -0.0570f;
-	sensor_gps.cog_rad = 0.3988f;
+	sensor_gps.vel_m_s = 0.f;
+	sensor_gps.vel_n_m_s = 0.f;
+	sensor_gps.vel_e_m_s = 0.f;
+	sensor_gps.vel_d_m_s = 0.f;
+	sensor_gps.cog_rad = NAN;
 	sensor_gps.timestamp_time_relative = 0;
 	sensor_gps.heading = NAN;
 	sensor_gps.heading_offset = 0.0000;
@@ -101,7 +105,63 @@ void FakeGps::Run()
 
 int FakeGps::task_spawn(int argc, char *argv[])
 {
-	FakeGps *instance = new FakeGps();
+	double latitude_deg{29.6603018};
+	double longitude_deg{-82.3160500};
+	double altitude_m{30.1};
+	bool lat_set = false;
+	bool lon_set = false;
+	bool alt_set = false;
+
+	int myoptind = 1;
+	int ch;
+	const char *myoptarg = nullptr;
+
+	while ((ch = px4_getopt(argc, argv, "l:o:a:", &myoptind, &myoptarg)) != EOF) {
+		switch (ch) {
+		case 'l':
+			latitude_deg = strtod(myoptarg, nullptr);
+			lat_set = true;
+			break;
+
+		case 'o':
+			longitude_deg = strtod(myoptarg, nullptr);
+			lon_set = true;
+			break;
+
+		case 'a':
+			altitude_m = strtod(myoptarg, nullptr);
+			alt_set = true;
+			break;
+
+		default:
+			print_usage("unrecognized flag");
+			return PX4_ERROR;
+		}
+	}
+
+	if (lat_set || lon_set || alt_set) {
+		if (!(lat_set && lon_set && alt_set)) {
+			print_usage("-l, -o and -a must be provided together");
+			return PX4_ERROR;
+		}
+
+		if (!PX4_ISFINITE(latitude_deg) || latitude_deg < -90.0 || latitude_deg > 90.0) {
+			print_usage("latitude must be finite and within [-90, 90]");
+			return PX4_ERROR;
+		}
+
+		if (!PX4_ISFINITE(longitude_deg) || longitude_deg < -180.0 || longitude_deg > 180.0) {
+			print_usage("longitude must be finite and within [-180, 180]");
+			return PX4_ERROR;
+		}
+
+		if (!PX4_ISFINITE(altitude_m)) {
+			print_usage("altitude must be finite");
+			return PX4_ERROR;
+		}
+	}
+
+	FakeGps *instance = new FakeGps(latitude_deg, longitude_deg, altitude_m);
 
 	if (instance) {
 		desc.object.store(instance);
@@ -137,10 +197,17 @@ int FakeGps::print_usage(const char *reason)
 		R"DESCR_STR(
 ### Description
 
+Publishes a static GNSS position at 5 Hz for bench testing without satellite
+reception. Ground and NED velocities are zero and the position carries no
+noise, so the vehicle appears stationary at the given coordinates.
+
 )DESCR_STR");
 
 	PRINT_MODULE_USAGE_NAME("fake_gps", "driver");
 	PRINT_MODULE_USAGE_COMMAND("start");
+	PRINT_MODULE_USAGE_PARAM_FLOAT('l', 29.6603018, -90.0, 90.0, "Latitude in degrees (requires -o and -a)", true);
+	PRINT_MODULE_USAGE_PARAM_FLOAT('o', -82.3160500, -180.0, 180.0, "Longitude in degrees (requires -l and -a)", true);
+	PRINT_MODULE_USAGE_PARAM_FLOAT('a', 30.1, -1000.0, 10000.0, "Altitude MSL in metres (requires -l and -o)", true);
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 	return 0;
 }
