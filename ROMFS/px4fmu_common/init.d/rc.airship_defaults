@@ -9,3 +9,7 @@ set VEHICLE_TYPE airship
 
 # MAV_TYPE_AIRSHIP 7
 param set-default MAV_TYPE 7
+
+# Disable auto-disarm on landing: the airship land detector reports "landed"
+# as soon as Land is selected, which would disarm the vehicle in the air
+param set-default COM_DISARM_LAND -1
