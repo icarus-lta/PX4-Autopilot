@@ -32,6 +32,10 @@ param set-default SIM_GZ_EC_MIN2 0
 param set-default SIM_GZ_EC_MAX1 300
 param set-default SIM_GZ_EC_MAX2 300
 
+# gz pod thrust is quadratic in the rotor speed command: linearize it so a
+# normalized torque demand is the torque the pods deliver at every level
+param set-default THR_MDL_FAC 1
+
 # Tilt servos: 1 = starboard, 2 = port; the angle range is a placeholder
 # pending the vehicle specification
 param set-default SIM_GZ_SV_FUNC1 201
