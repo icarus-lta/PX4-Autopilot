@@ -114,6 +114,8 @@ private:
 	matrix::Vector3f _surface_torque{};	///< torque the clipped, trim-relative surface deflections can deliver
 	float _achieved_roll{0.f};
 	float _achieved_yaw{0.f};
+	float _held_roll{0.f};		///< roll a pod held inside the steer band leaves unserved by choice
+	float _held_yaw{0.f};		///< yaw a pod held inside the steer band leaves unserved by choice
 
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::CA_AIRSHIP_TLMIN>) _param_ca_airship_tlmin,
