@@ -1595,3 +1595,55 @@ TEST(ActuatorEffectivenessAirshipTest, CollectiveYawShortfallStandsInSteerBand)
 	airship.getUnallocatedControl(0, status);
 	EXPECT_FLOAT_EQ(status.unallocated_torque[2], 1.f);
 }
+
+TEST(ActuatorEffectivenessAirshipTest, SurfaceServedBandShortfallIsNotSaturation)
+{
+	resetAirshipParams();
+	setSurfaces();
+	setSurfaceCredit(0.5f);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// A rudder serves yaw, so the report takes the surface branch. Half the
+	// rudder's 0.02 allocation is credited, leaving 0.01 for the pods, which
+	// is inside the steer band: they hold level and the starboard motor
+	// clips, so only half of that arrives
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.02f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	actuator_sp(SURFACE_RUDDER) = 0.02f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
+	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.01f, 1e-6f);
+
+	// The held half is the band's choice on this path too
+	control_allocator_status_s status{};
+	status.unallocated_torque[2] = 0.f; // matrix residual: demand minus rudder
+	airship.getUnallocatedControl(0, status);
+	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, SurfaceServedSwingShortfallStands)
+{
+	resetAirshipParams();
+	setSurfaces();
+	setSurfaceCredit(0.5f);
+	setTiltRate(90.f);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// Same path, but now the pod share is far above the band: the starboard
+	// tilt is steering toward the rear and has not arrived, so the couple is
+	// genuinely missing and must still be reported
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	actuator_sp(SURFACE_RUDDER) = 0.6f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_GT(actuator_sp(TILT_STARBOARD), 0.f);
+	EXPECT_LT(actuator_sp(TILT_STARBOARD), 0.2f);
+
+	control_allocator_status_s status{};
+	status.unallocated_torque[2] = 0.4f; // matrix residual: demand minus rudder
+	airship.getUnallocatedControl(0, status);
+	EXPECT_GT(status.unallocated_torque[2], 0.1f);
+}
