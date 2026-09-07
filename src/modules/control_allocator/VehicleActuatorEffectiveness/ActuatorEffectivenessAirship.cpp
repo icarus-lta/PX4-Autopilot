@@ -322,9 +322,11 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 			  _saturation_flags.thrust_z_pos, _saturation_flags.thrust_z_neg);
 	// Collective pods project the same demand, so their held parts cancel
 	// and the structural yaw/roll shortfall stands
-	setSaturationFlag(discountHeld(yaw - achieved_yaw, 0.5f * (held_x[1] - held_x[0])),
+	_held_yaw = 0.5f * (held_x[1] - held_x[0]);
+	_held_roll = 0.5f * (held_z[1] - held_z[0]);
+	setSaturationFlag(discountHeld(yaw - achieved_yaw, _held_yaw),
 			  _saturation_flags.yaw_pos, _saturation_flags.yaw_neg);
-	setSaturationFlag(discountHeld(roll - _achieved_roll, 0.5f * (held_z[1] - held_z[0])),
+	setSaturationFlag(discountHeld(roll - _achieved_roll, _held_roll),
 			  _saturation_flags.roll_pos, _saturation_flags.roll_neg);
 	// The pods produce no pitch torque
 	setSaturationFlag(control_sp(ControlAxis::PITCH), _saturation_flags.pitch_pos, _saturation_flags.pitch_neg);
@@ -361,11 +363,13 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 	// achieved so the rate controller keeps integrating (see updateSetpoint).
 	// Torque axes with control-surface effectiveness instead keep the matrix
 	// residual, corrected for the uncredited share of the surface allocation
-	// and reduced by what the pods and tail achieved.
+	// and reduced by what the pods and tail achieved; the held share is
+	// discounted there too, so the band's choice never reads as saturation.
 	const float uncredited = 1.f - _param_ca_airship_cs_k.get();
 
 	if (_surface_serves[0]) {
-		status.unallocated_torque[0] += uncredited * _surface_torque(0) - _achieved_roll;
+		status.unallocated_torque[0] = discountHeld(status.unallocated_torque[0]
+					       + uncredited * _surface_torque(0) - _achieved_roll, _held_roll);
 
 	} else if (_saturation_flags.roll_pos) {
 		status.unallocated_torque[0] = 1.f;
@@ -392,7 +396,8 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 	}
 
 	if (_surface_serves[2]) {
-		status.unallocated_torque[2] += uncredited * _surface_torque(2) - _achieved_yaw;
+		status.unallocated_torque[2] = discountHeld(status.unallocated_torque[2]
+					       + uncredited * _surface_torque(2) - _achieved_yaw, _held_yaw);
 
 	} else if (_saturation_flags.yaw_pos) {
 		status.unallocated_torque[2] = 1.f;
