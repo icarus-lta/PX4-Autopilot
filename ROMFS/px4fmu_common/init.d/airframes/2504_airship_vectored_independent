@@ -27,3 +27,6 @@ param set-default CA_AIRSHIP_GRP 1
 param set-default CA_AIRSHIP_TLMIN -180
 param set-default CA_AIRSHIP_TLMAX 180
 param set-default CA_AIRSHIP_TLT_R 120
+
+# THR_MDL_FAC stays at default pending a measured thrust curve; the AS_YAWRATE
+# defaults were tuned on the linearized gz twin

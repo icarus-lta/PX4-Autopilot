@@ -39,9 +39,12 @@ px4_add_module(
 	SRCS
 		airship_att_control_main.cpp
 		airship_yaw_rate.hpp
+	MODULE_CONFIG
+		airship_att_control_params.yaml
 	DEPENDS
 		mathlib
 		px4_work_queue
+		RateControl
 	)
 
 px4_add_unit_gtest(SRC AirshipYawRateTest.cpp LINKLIBS modules__airship_att_control)
