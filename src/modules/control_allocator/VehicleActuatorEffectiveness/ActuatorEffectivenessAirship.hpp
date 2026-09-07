@@ -63,6 +63,7 @@ public:
 	// between opposite directions. Steering therefore engages only above the
 	// stick-noise floor and releases at half of it; inside the band the last
 	// commanded direction stands, so a sign reversal there cannot retarget.
+	// What a held pod projects away is not reported as saturation.
 	static constexpr float kTiltSteerEngage = 0.02f;
 	static constexpr float kTiltSteerRelease = 0.01f;
 
@@ -88,6 +89,7 @@ private:
 		bool thrust_z_neg;
 	};
 	static void setSaturationFlag(float coeff, bool &positive_flag, bool &negative_flag);
+	static float discountHeld(float residual, float held_part);
 
 	SaturationFlags _saturation_flags{};
 
