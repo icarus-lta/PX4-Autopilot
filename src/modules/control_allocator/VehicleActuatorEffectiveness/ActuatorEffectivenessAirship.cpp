@@ -156,6 +156,8 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	const float dt = math::constrain((now - _last_update_time) * 1e-6f, 2e-4f, 0.1f);
 	_last_update_time = now;
 
+	bool retargeted[2] {};	// the demand recomputed the tilt direction this update
+
 	for (int i = 0; i < 2; i++) {
 		// The range params may have narrowed at runtime: pull the held
 		// state back in before anything uses it
@@ -171,6 +173,7 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 
 		} else if (magnitude > kTiltSteerEngage) {
 			_tilt_steering[i] = true;
+			retargeted[i] = true;
 			float tilt = atan2f(fz[i], fx[i]);
 
 			// Reaching the opposite range end costs a full sweep of an
@@ -287,18 +290,55 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	_achieved_roll = 0.5f * (achieved_z[1] - achieved_z[0]);
 	_achieved_yaw = achieved_yaw;
 
-	setSaturationFlag(thrust_forward - 0.5f * (achieved_x[0] + achieved_x[1]),
+	// A pod inside the steer band holds its direction on purpose (see
+	// kTiltSteerEngage); what it projects away is the band's choice, not
+	// missing authority, and reported as saturation it would freeze the rate
+	// controller's integrator against the small steady torques the integral
+	// exists to remove. Discount that part from the reported shortfall: a
+	// swinging pod, a fixed mount or a clamped actuator remain real.
+	constexpr float kTiltSettled = 1e-3f; // rad
+	float held_x[2] {};	// demand a held pod leaves unserved by choice
+	float held_z[2] {};
+
+	for (int i = 0; i < 2; i++) {
+		const bool held = _tilt_count > 0 && _armed && !retargeted[i]
+				  && fabsf(_tilt[i].getState() - _tilt_target[i]) < kTiltSettled
+				  && thrust[i] <= actuator_max(i);
+
+		if (held) {
+			held_x[i] = fx[i] - achieved_x[i];
+			held_z[i] = fz[i] - achieved_z[i];
+		}
+	}
+
+	setSaturationFlag(discountHeld(thrust_forward - 0.5f * (achieved_x[0] + achieved_x[1]),
+				       0.5f * (held_x[0] + held_x[1])),
 			  _saturation_flags.thrust_x_pos, _saturation_flags.thrust_x_neg);
 	// No actuator produces lateral force: the demand is unserved as-is
 	setSaturationFlag(control_sp(ControlAxis::THRUST_Y),
 			  _saturation_flags.thrust_y_pos, _saturation_flags.thrust_y_neg);
-	setSaturationFlag(-(thrust_up - 0.5f * (achieved_z[0] + achieved_z[1])),
+	setSaturationFlag(discountHeld(-(thrust_up - 0.5f * (achieved_z[0] + achieved_z[1])),
+				       -0.5f * (held_z[0] + held_z[1])),
 			  _saturation_flags.thrust_z_pos, _saturation_flags.thrust_z_neg);
-	setSaturationFlag(yaw - achieved_yaw, _saturation_flags.yaw_pos, _saturation_flags.yaw_neg);
-	setSaturationFlag(roll - _achieved_roll,
+	// Collective pods project the same demand, so their held parts cancel
+	// and the structural yaw/roll shortfall stands
+	setSaturationFlag(discountHeld(yaw - achieved_yaw, 0.5f * (held_x[1] - held_x[0])),
+			  _saturation_flags.yaw_pos, _saturation_flags.yaw_neg);
+	setSaturationFlag(discountHeld(roll - _achieved_roll, 0.5f * (held_z[1] - held_z[0])),
 			  _saturation_flags.roll_pos, _saturation_flags.roll_neg);
 	// The pods produce no pitch torque
 	setSaturationFlag(control_sp(ControlAxis::PITCH), _saturation_flags.pitch_pos, _saturation_flags.pitch_neg);
+}
+
+float
+ActuatorEffectivenessAirship::discountHeld(float residual, float held_part)
+{
+	// Remove the held-by-choice share from a same-signed shortfall
+	if (residual * held_part > 0.f) {
+		return copysignf(fmaxf(fabsf(residual) - fabsf(held_part), 0.f), residual);
+	}
+
+	return residual;
 }
 
 void
@@ -317,9 +357,11 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 {
 	// Note: the values '-1', '1' and '0' are just to indicate a negative,
 	// positive or no saturation to the rate controller. The actual magnitude
-	// is not used. Torque axes with control-surface effectiveness instead
-	// keep the matrix residual, corrected for the uncredited share of the
-	// surface allocation and reduced by what the pods and tail achieved.
+	// is not used. A shortfall the tilt steer band holds by choice reads as
+	// achieved so the rate controller keeps integrating (see updateSetpoint).
+	// Torque axes with control-surface effectiveness instead keep the matrix
+	// residual, corrected for the uncredited share of the surface allocation
+	// and reduced by what the pods and tail achieved.
 	const float uncredited = 1.f - _param_ca_airship_cs_k.get();
 
 	if (_surface_serves[0]) {
