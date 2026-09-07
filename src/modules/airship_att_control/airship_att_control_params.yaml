@@ -1,0 +1,51 @@
+module_name: airship_att_control
+
+parameters:
+- group: Airship Rate Control
+  definitions:
+    AS_YAWRATE_P:
+      description:
+        short: Yaw rate P gain
+        long: Yaw rate proportional gain, i.e. control output for angular speed error
+          1 rad/s.
+      type: float
+      default: 0.5
+      min: 0.0
+      max: 10.0
+      decimal: 3
+      increment: 0.01
+    AS_YAWRATE_I:
+      description:
+        short: Yaw rate I gain
+        long: Yaw rate integral gain. Compensates steady yaw disturbances such as wind.
+      type: float
+      default: 0.09
+      min: 0.0
+      decimal: 3
+      increment: 0.01
+    AS_YR_INT_LIM:
+      description:
+        short: Yaw rate integrator limit
+        long: Yaw rate integrator limit, in normalized yaw torque where 1.0 is the
+          full pod couple. Can be set to increase the amount of integrator available
+          to counteract disturbances such as wind, or reduced to improve settling
+          time after large yaw moment trim changes.
+      type: float
+      default: 0.3
+      min: 0.0
+      max: 1.0
+      decimal: 2
+      increment: 0.01
+    AS_YAWRATE_MAX:
+      description:
+        short: Max yaw rate
+        long: Full yaw stick deflection commands this yaw rate in every manual mode
+          with rate control (Acro, Stabilized, Altitude, Position). The stick passes
+          through MAN_DEADZONE first, so the center band commands zero rate.
+      type: float
+      default: 15.0
+      unit: deg/s
+      min: 0.0
+      max: 90.0
+      decimal: 1
+      increment: 1
