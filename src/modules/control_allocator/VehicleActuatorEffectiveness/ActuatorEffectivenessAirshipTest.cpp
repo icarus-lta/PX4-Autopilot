@@ -59,6 +59,9 @@ static constexpr int COLLECTIVE_TILT = 2;
 static constexpr int TAIL_COLLECTIVE_TILT = 3;
 static constexpr int TAIL_COLLECTIVE_RUDDER = 5;
 
+// The allocator's dt ceiling: the largest step it hands the effectiveness [s]
+static constexpr float kDt = 0.02f;
+
 static void resetAirshipParams(float tilt_min_deg = -180.f, float tilt_max_deg = 180.f)
 {
 	// Disable autosaving parameters to avoid busy loop in param_set()
@@ -157,6 +160,7 @@ static void runUpdateSetpoint(ActuatorEffectivenessAirship &airship, const Vecto
 
 	ActuatorEffectiveness::ActuatorVector actuator_max{};
 	actuator_max.setAll(1.f);
+	airship.allocateAuxilaryControls(kDt, 0, actuator_sp);
 	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
 }
 
@@ -1166,7 +1170,7 @@ TEST(ActuatorEffectivenessAirshipTest, SlewKeepsCommittedEnd)
 	setTiltRate(90.f);
 	ActuatorEffectivenessAirship airship(nullptr);
 
-	// Commit to the +180 deg end; the first slew step moves 9 deg at most
+	// Commit to the +180 deg end; the first slew step moves 1.8 deg (90 deg/s x kDt)
 	Vector<float, 6> control_sp{};
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
@@ -1407,20 +1411,17 @@ TEST(ActuatorEffectivenessAirshipTest, TiltRateLimited)
 	setTiltRate(90.f);
 	ActuatorEffectivenessAirship airship(nullptr);
 
-	// A full vertical demand asks for +90 deg, but the first update may
-	// move the tilt at most 90 deg/s * dt (dt is clamped to 0.1 s)
+	// A full vertical demand asks for +90 deg, but each update moves the
+	// tilt by 90 deg/s x kDt = 1.8 deg, 0.01 of the 360 deg servo span
 	Vector<float, 6> control_sp{};
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = -1.f;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
-	const float first = actuator_sp(TILT_STARBOARD);
-	EXPECT_GT(first, 0.f);
-	EXPECT_LT(first, 0.1f); // well below the +90 deg target at 0.25
+	EXPECT_NEAR(actuator_sp(TILT_STARBOARD), 0.01f, 1e-6f);
 
 	// The tilt keeps slewing toward the target on the next update
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
-	EXPECT_GT(actuator_sp(TILT_STARBOARD), first);
-	EXPECT_LT(actuator_sp(TILT_STARBOARD), 0.25f);
+	EXPECT_NEAR(actuator_sp(TILT_STARBOARD), 0.02f, 1e-6f);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, DisarmParksTiltLevel)
@@ -1510,7 +1511,7 @@ TEST(ActuatorEffectivenessAirshipTest, SwingShortfallIsSaturation)
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	// A full couple from level pods: the starboard tilt is steering toward
-	// the rear but moves at most 9 deg per update, so the couple is not
+	// the rear but moves 1.8 deg per update, so the couple is not
 	// delivered yet. That shortfall is transient saturation the rate
 	// controller must not integrate against
 	Vector<float, 6> control_sp{};

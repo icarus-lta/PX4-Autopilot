@@ -55,7 +55,6 @@
 #include "control_allocation/actuator_effectiveness/ActuatorEffectiveness.hpp"
 #include "ActuatorEffectivenessControlSurfaces.hpp"
 
-#include <drivers/drv_hrt.h>
 #include <lib/mathlib/mathlib.h>
 #include <lib/slew_rate/SlewRate.hpp>
 #include <px4_platform_common/module_params.h>
@@ -73,6 +72,9 @@ public:
 	void updateSetpoint(const matrix::Vector<float, NUM_AXES> &control_sp, int matrix_index,
 			    ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
 			    const ActuatorVector &actuator_max) override;
+
+	/** No auxiliary controls: takes the allocator's cycle time for the tilt slew in updateSetpoint() */
+	void allocateAuxilaryControls(const float dt, int matrix_index, ActuatorVector &actuator_sp) override { _dt = dt; }
 
 	void getUnallocatedControl(int matrix_index, control_allocator_status_s &status) override;
 
@@ -127,7 +129,7 @@ private:
 	// must steer. On a vehicle the commander's boot sample (disarmed) is
 	// read on the first update and parks the pods.
 	bool _armed{true};
-	hrt_abstime _last_update_time{0};
+	float _dt{0.f};		///< allocator time step [s], handed in right before updateSetpoint()
 
 	uORB::Subscription _actuator_armed_sub{ORB_ID(actuator_armed)};
 
