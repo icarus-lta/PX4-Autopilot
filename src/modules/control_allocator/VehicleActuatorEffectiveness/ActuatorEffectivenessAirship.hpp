@@ -98,21 +98,8 @@ public:
 	static constexpr float kTiltRearCone = 0.05f;
 
 private:
-	struct SaturationFlags {
-		bool roll_pos;
-		bool roll_neg;
-		bool pitch_pos;
-		bool pitch_neg;
-		bool yaw_pos;
-		bool yaw_neg;
-		bool thrust_x_pos;
-		bool thrust_x_neg;
-		bool thrust_y_pos;
-		bool thrust_y_neg;
-		bool thrust_z_pos;
-		bool thrust_z_neg;
-	};
-	static void setSaturationFlag(float coeff, bool &positive_flag, bool &negative_flag);
+	/** +1, -1 or 0: the direction of a shortfall, as the rate controller reads it */
+	static float saturationSign(float shortfall);
 	static float discountHeld(float residual, float held_part);
 
 	/**
@@ -129,8 +116,6 @@ private:
 
 	float tiltMin() const { return math::radians(_param_ca_airship_tlmin.get()); }
 	float tiltMax() const { return math::radians(_param_ca_airship_tlmax.get()); }
-
-	SaturationFlags _saturation_flags{};
 
 	SlewRate<float> _tilt[2] {};	///< realized tilt [rad], held through zero-thrust
 	float _tilt_target[2] {};	///< commanded tilt [rad] the slew tracks; holds through the hysteresis band
@@ -157,10 +142,10 @@ private:
 
 	bool _surface_serves[3] {};	///< torque axes with control-surface effectiveness
 	matrix::Vector3f _surface_torque{};	///< torque the clipped, trim-relative surface deflections can deliver
-	float _achieved_roll{0.f};
-	float _achieved_yaw{0.f};
-	float _held_roll{0.f};		///< roll a pod held inside the steer band leaves unserved by choice
-	float _held_yaw{0.f};		///< yaw a pod held inside the steer band leaves unserved by choice
+	matrix::Vector3f _achieved_torque{};	///< torque the pods and tail delivered (no pitch: the pods produce none)
+	matrix::Vector3f _held_torque{};	///< torque a pod held inside the steer band leaves unserved by choice
+	float _unallocated_torque[3] {};	///< sign of the roll/pitch/yaw shortfall left by the propulsors
+	float _unallocated_thrust[3] {};	///< sign of the x/y/z force shortfall left by the propulsors
 
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::CA_AIRSHIP_TLMIN>) _param_ca_airship_tlmin,
