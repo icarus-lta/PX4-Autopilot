@@ -33,6 +33,8 @@
 
 #include "AirshipPod.hpp"
 
+#include <float.h>
+
 using namespace matrix;
 
 void AirshipPod::setTiltRange(const float tilt_min, const float tilt_max)
@@ -40,45 +42,47 @@ void AirshipPod::setTiltRange(const float tilt_min, const float tilt_max)
 	_tilt_min = tilt_min;
 	_tilt_max = fmaxf(tilt_max, tilt_min);
 	_tilt.setForcedValue(math::constrain(_tilt.getState(), _tilt_min, _tilt_max));
-	_tilt_sp = math::constrain(_tilt_sp, _tilt_min, _tilt_max);
+	_tilt_target = math::constrain(_tilt_target, _tilt_min, _tilt_max);
 }
 
 void AirshipPod::steer(const Vector2f &force, const float dt)
 {
-	const float magnitude = sqrtf(force(0) * force(0) + force(1) * force(1));
+	const float magnitude = force.norm();
+	const bool engaged = _mode == TiltMode::Steering || _mode == TiltMode::Holding;
 
 	if (magnitude > kSteerEngage) {
 		_mode = TiltMode::Steering;
-		_tilt_sp = steerTarget(force, magnitude);
+		_tilt_target = steerTarget(force, magnitude);
 
-	} else if (!((_mode == TiltMode::Steering || _mode == TiltMode::Holding) && magnitude > kSteerRelease)) {
-		// Below release (or a NaN demand): the tilt stays where it is
-		_mode = TiltMode::Released;
-		_tilt_sp = _tilt.getState();
+	} else if (engaged && magnitude > kSteerRelease) {
+		// Inside the band an engaged target stands
+		_mode = TiltMode::Holding;
 
 	} else {
-		// Inside the band the setpoint stands
-		_mode = TiltMode::Holding;
+		// At or below release, a NaN demand, or inside the band with nothing
+		// engaged: the tilt stays where it is
+		_mode = TiltMode::Released;
+		_tilt_target = _tilt.getState();
 	}
 
-	slewToSetpoint(dt);
+	slewToTarget(dt);
 }
 
 void AirshipPod::park(const float dt)
 {
 	_mode = TiltMode::Parked;
-	_tilt_sp = math::constrain(0.f, _tilt_min, _tilt_max);
-	slewToSetpoint(dt);
+	_tilt_target = math::constrain(0.f, _tilt_min, _tilt_max);
+	slewToTarget(dt);
 }
 
-void AirshipPod::slewToSetpoint(const float dt)
+void AirshipPod::slewToTarget(const float dt)
 {
 	if (_slew_rate > 0.f) {
 		_tilt.setSlewRate(_slew_rate);
-		_tilt.update(_tilt_sp, dt);
+		_tilt.update(_tilt_target, dt);
 
 	} else {
-		_tilt.setForcedValue(_tilt_sp);
+		_tilt.setForcedValue(_tilt_target);
 	}
 }
 
@@ -102,13 +106,13 @@ float AirshipPod::steerTarget(const Vector2f &force, const float magnitude) cons
 		if (fmaxf(reverse_hi, reverse_lo) <= FLT_EPSILON) {
 			// No end points backward (e.g. -90..90): a sweep would realize
 			// nothing, so the tilt stays
-			tilt = _tilt_sp;
+			tilt = _tilt_target;
 
 		} else if (fabsf(reverse_hi - reverse_lo) > FLT_EPSILON) {
 			tilt = reverse_hi > reverse_lo ? rear_hi : rear_lo;
 
 		} else {
-			tilt = _tilt_sp >= 0.f ? rear_hi : rear_lo;
+			tilt = _tilt_target >= 0.f ? rear_hi : rear_lo;
 		}
 
 	} else if (tilt < _tilt_min || tilt > _tilt_max) {
@@ -118,7 +122,7 @@ float AirshipPod::steerTarget(const Vector2f &force, const float magnitude) cons
 		// past the margin
 		const float p_hi = fmaxf(0.f, force(0) * cosf(_tilt_max) + force(1) * sinf(_tilt_max));
 		const float p_lo = fmaxf(0.f, force(0) * cosf(_tilt_min) + force(1) * sinf(_tilt_min));
-		const bool committed_hi = _tilt_sp - _tilt_min > _tilt_max - _tilt_sp;
+		const bool committed_hi = _tilt_target - _tilt_min > _tilt_max - _tilt_target;
 
 		if (committed_hi) {
 			tilt = p_lo > p_hi + switch_margin ? _tilt_min : _tilt_max;
@@ -138,11 +142,12 @@ float AirshipPod::servoSetpoint() const
 
 void AirshipPod::setServoSetpoint(const float servo_sp)
 {
-	setTilt(_tilt_min + (servo_sp + 1.f) * 0.5f * (_tilt_max - _tilt_min));
+	_tilt.setForcedValue(_tilt_min + (servo_sp + 1.f) * 0.5f * (_tilt_max - _tilt_min));
 }
 
-bool AirshipPod::heldInBand() const
+bool AirshipPod::heldByChoice() const
 {
-	return (_mode == TiltMode::Holding || _mode == TiltMode::Released)
-	       && fabsf(_tilt.getState() - _tilt_sp) < kTiltSettledTolerance;
+	// A fixed mount withholds nothing by choice
+	return canTilt() && (_mode == TiltMode::Holding || _mode == TiltMode::Released)
+	       && fabsf(_tilt.getState() - _tilt_target) < kTiltSettledTolerance;
 }

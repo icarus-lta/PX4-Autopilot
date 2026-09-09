@@ -42,7 +42,6 @@
 
 #pragma once
 
-#include <float.h>
 #include <lib/mathlib/mathlib.h>
 #include <lib/matrix/matrix/math.hpp>
 #include <lib/slew_rate/SlewRate.hpp>
@@ -51,20 +50,17 @@ class AirshipPod
 {
 public:
 	// The tilt follows the demand direction only above the engage floor, holds
-	// its setpoint between release and engage, and is released where it stands
+	// its target between release and engage, and is released where it stands
 	// below release (a direction near zero magnitude is noise) [normalized]
 	static constexpr float kSteerEngage = 0.02f;
 	static constexpr float kSteerRelease = 0.01f;
 
 	// Share of the demand a range end must realize beyond the other before
 	// the tilt switches ends (floored at kSteerRelease); also the half-width
-	// of the straight-back cone where +-180 deg are one direction
+	// of the straight-back cone where +-180 deg are one direction [-]
 	static constexpr float kEndSwitchMargin = 0.05f;
 
-	static constexpr float kMinTiltSpan = 1e-3f;		///< below this range the pod is a fixed mount [rad]
-	static constexpr float kTiltSettledTolerance = 1e-3f;	///< the tilt counts as at its setpoint [rad]
-
-	/** Tilt range [rad]; an inverted pair is a fixed mount at tilt_min. Pulls the tilt and its setpoint into the range */
+	/** Tilt range [rad]; an inverted pair is a fixed mount at tilt_min. Pulls the tilt and its target into the range */
 	void setTiltRange(float tilt_min, float tilt_max);
 
 	/** Tilt slew rate limit [rad/s]; 0 = unlimited */
@@ -79,28 +75,39 @@ public:
 	void park(float dt);
 
 	float tilt() const { return _tilt.getState(); }	///< realized tilt [rad]
-	void setTilt(float tilt) { _tilt.setForcedValue(tilt); }
 
-	/** Servo output [-1, 1] of the realized tilt over the range */
+	/** Servo output [-1, 1] of the realized tilt over the range; valid only while canTilt() */
 	float servoSetpoint() const;
 
-	/** Read a clamped servo output back into the realized tilt */
+	/** Read a clamped servo output back into the realized tilt; valid only while canTilt() */
 	void setServoSetpoint(float servo_sp);
 
 	/** Unit vector (forward, up) the propeller thrusts along at the realized tilt */
 	matrix::Vector2f thrustAxis() const { return matrix::Vector2f{cosf(tilt()), sinf(tilt())}; }
 
-	/** The tilt sits at its setpoint inside the steer band: what it withholds is by choice */
-	bool heldInBand() const;
+	/**
+	 * Steered below the engage floor (holding or released) and settled at its
+	 * target: what the pod withholds is by choice, not missing authority. A
+	 * fixed mount, a parked, steering or still-slewing tilt reports its shortfall
+	 */
+	bool heldByChoice() const;
 
 private:
-	enum class TiltMode : uint8_t { Parked, Steering, Holding, Released };
+	static constexpr float kMinTiltSpan = 1e-3f;		///< below this range the pod is a fixed mount [rad]
+	static constexpr float kTiltSettledTolerance = 1e-3f;	///< the tilt counts as at its target [rad]
+
+	enum class TiltMode : uint8_t {
+		Parked,		///< as close to level as the range allows
+		Steering,	///< demand above the engage floor: the target follows its direction
+		Holding,	///< demand between release and engage while engaged: the target stands
+		Released	///< demand below release, NaN, or not engaged: the target is the tilt itself
+	};
 
 	float steerTarget(const matrix::Vector2f &force, float magnitude) const;
-	void slewToSetpoint(float dt);
+	void slewToTarget(float dt);
 
 	SlewRate<float> _tilt{};	///< realized tilt [rad]
-	float _tilt_sp{0.f};		///< tilt setpoint the slew tracks [rad]; stands through the steer band
+	float _tilt_target{0.f};	///< tilt target the slew tracks [rad]
 	float _tilt_min{0.f};		///< [rad]
 	float _tilt_max{0.f};		///< [rad], >= _tilt_min
 	float _slew_rate{0.f};		///< [rad/s], 0 = unlimited

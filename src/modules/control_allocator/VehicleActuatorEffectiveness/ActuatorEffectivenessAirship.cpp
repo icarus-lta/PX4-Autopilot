@@ -80,7 +80,11 @@ ActuatorEffectivenessAirship::getEffectivenessMatrix(Configuration &configuratio
 	}
 
 	_first_tilt_idx = configuration.num_actuators_matrix[0];
-	_num_tilt_servos = _pods[STARBOARD].canTilt() ? (_grouping == Grouping::Independent ? NUM_PODS : 1) : 0;
+	_num_tilt_servos = 0;
+
+	if (_pods[STARBOARD].canTilt()) {
+		_num_tilt_servos = _grouping == Grouping::Independent ? NUM_PODS : 1;	// one collective servo drives both pods
+	}
 
 	for (int i = 0; i < _num_tilt_servos; i++) {
 		configuration.addActuator(ActuatorType::SERVOS, Vector3f{}, Vector3f{});
@@ -102,16 +106,14 @@ ActuatorEffectivenessAirship::getEffectivenessMatrix(Configuration &configuratio
 	return surfaces_added;
 }
 
-bool
-ActuatorEffectivenessAirship::isArmed()
+void
+ActuatorEffectivenessAirship::updateArmedState()
 {
 	vehicle_status_s vehicle_status;
 
 	if (_vehicle_status_sub.update(&vehicle_status)) {
 		_armed = vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED;
 	}
-
-	return _armed;
 }
 
 Vector3f
@@ -167,10 +169,10 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 				      ? Vector2f{demand(ControlAxis::YAW), demand(ControlAxis::ROLL)} : Vector2f{};
 	const Vector2f pod_demand[NUM_PODS] = {common - differential, common + differential};
 
-	const bool armed = isArmed();
+	updateArmedState();
 
 	for (int i = 0; i < NUM_PODS; i++) {
-		if (armed) {
+		if (_armed) {
 			_pods[i].steer(pod_demand[i], _dt);
 
 		} else {
@@ -184,14 +186,14 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	Vector2f held[NUM_PODS] {};
 
 	for (int i = 0; i < NUM_PODS; i++) {
-		const Vector2f axis = _pods[i].thrustAxis();
-		const float thrust = pod_demand[i](0) * axis(0) + pod_demand[i](1) * axis(1);
+		const Vector2f thrust_axis = _pods[i].thrustAxis();
+		const float thrust = pod_demand[i].dot(thrust_axis);
 
 		// non-reversible propellers: reverse only by tilting, the CA_R_REV pod bits are not honored
 		actuator_sp(i) = math::constrain(thrust, math::max(actuator_min(i), 0.f), actuator_max(i));
-		achieved[i] = axis * actuator_sp(i);
+		achieved[i] = thrust_axis * actuator_sp(i);
 
-		if (_num_tilt_servos > 0 && _pods[i].heldInBand()) {
+		if (_pods[i].heldByChoice()) {
 			held[i] = pod_demand[i] - achieved[i];
 		}
 	}
@@ -221,7 +223,9 @@ ActuatorEffectivenessAirship::writeTiltServos(ActuatorVector &actuator_sp, const
 {
 	// Written before the motors so the projection uses the clamped angle the
 	// servo realizes; the generic CA_SVn_SLEW runs after this model, so tilt
-	// slewing belongs to CA_AIRSHIP_TLT_R
+	// slewing belongs to CA_AIRSHIP_TLT_R. The count is the declared layout;
+	// the span check also covers a range updateParams() collapsed without a
+	// redeclaration, where servoSetpoint() would divide by zero
 	if (_num_tilt_servos == 0 || !_pods[STARBOARD].canTilt()) {
 		return;
 	}
@@ -233,7 +237,7 @@ ActuatorEffectivenessAirship::writeTiltServos(ActuatorVector &actuator_sp, const
 	}
 
 	if (_grouping == Grouping::Collective) {
-		_pods[PORT].setTilt(_pods[STARBOARD].tilt());
+		_pods[PORT].setServoSetpoint(actuator_sp(_first_tilt_idx));
 	}
 }
 
@@ -264,18 +268,24 @@ ActuatorEffectivenessAirship::saturationSign(float shortfall)
 void
 ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_allocator_status_s &status)
 {
-	// Note: the values '-1', '1' and '0' are just to indicate a negative,
-	// positive or no saturation to the rate controller; the magnitude is not
-	// used. Torque axes a control surface serves keep the matrix residual
-	// (corrected for the uncredited surface share, less what the pods and
-	// tail achieved and the held share).
+	// The rate controller gates on torque_setpoint_achieved, then reads only
+	// the sign of each axis. Torque axes a control surface serves keep the
+	// matrix residual: it credits the surface in full, so add back the share
+	// CA_AIRSHIP_CS_K left uncredited (the pods were asked to serve it),
+	// subtract what the pods and tail achieved and discount the held share.
+	// The other axes report a sign only.
 	const float uncredited = 1.f - _param_ca_airship_cs_k.get();
 
 	for (int axis = 0; axis < 3; axis++) {
-		status.unallocated_torque[axis] = _surface_serves[axis]
-						  ? discountHeld(status.unallocated_torque[axis] + uncredited * _surface_torque(axis)
-								  - _achieved_torque(axis), _held_torque(axis))
-						  : saturationSign(_unallocated_control(axis));
+		if (_surface_serves[axis]) {
+			status.unallocated_torque[axis] = discountHeld(status.unallocated_torque[axis]
+							  + uncredited * _surface_torque(axis) - _achieved_torque(axis),
+							  _held_torque(axis));
+
+		} else {
+			status.unallocated_torque[axis] = saturationSign(_unallocated_control(axis));
+		}
+
 		status.unallocated_thrust[axis] = saturationSign(_unallocated_control(ControlAxis::THRUST_X + axis));
 	}
 }

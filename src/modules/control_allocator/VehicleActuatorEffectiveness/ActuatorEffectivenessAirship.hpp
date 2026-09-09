@@ -62,11 +62,8 @@ public:
 	static constexpr int NUM_PODS = 2;
 	enum MotorIndex { STARBOARD = 0, PORT = 1, TAIL = 2 };
 
-	enum class Grouping : int32_t {
-		// This matches with the parameter CA_AIRSHIP_GRP
-		Collective = 0,
-		Independent = 1,
-	};
+	/** Pod grouping: CA_AIRSHIP_GRP > 0 selects Independent, anything else Collective */
+	enum class Grouping { Collective, Independent };
 
 	ActuatorEffectivenessAirship(ModuleParams *parent);
 	virtual ~ActuatorEffectivenessAirship() = default;
@@ -88,8 +85,8 @@ protected:
 	void updateParams() override;
 
 private:
-	/** Refresh the armed state from vehicle_status */
-	bool isArmed();
+	/** Refresh _armed from vehicle_status; the last sample holds between updates */
+	void updateArmedState();
 
 	/** Torque the clipped, trim-relative control-surface deflections deliver */
 	matrix::Vector3f surfaceTorque(const ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
@@ -103,11 +100,10 @@ private:
 			     const ActuatorVector &actuator_max);
 
 	/**
-	 * Remove from a shortfall the share a pod withheld by the steer band's
-	 * choice: reported as saturation it would freeze the rate integrator
-	 * against the small steady torques the integral exists to remove. Only
-	 * a same-signed share is removed; a swinging, clamped or fixed tilt
-	 * keeps reporting.
+	 * Remove from a shortfall the share a pod withheld by choice (see
+	 * AirshipPod::heldByChoice): reported as saturation it would freeze the
+	 * rate integrator against the small steady torques the integral exists
+	 * to remove. Only a same-signed share is removed.
 	 */
 	static float discountHeld(float shortfall, float held);
 
@@ -134,7 +130,7 @@ private:
 
 	matrix::Vector3f _surface_torque{};	///< torque the clipped, trim-relative surface deflections deliver
 	matrix::Vector3f _achieved_torque{};	///< torque the pods and tail delivered
-	matrix::Vector3f _held_torque{};	///< torque a pod held inside the steer band leaves unserved by choice
+	matrix::Vector3f _held_torque{};	///< torque the pods withhold by choice (AirshipPod::heldByChoice)
 	matrix::Vector<float, NUM_AXES> _unallocated_control{};	///< shortfall per axis less the held share
 
 	DEFINE_PARAMETERS(
