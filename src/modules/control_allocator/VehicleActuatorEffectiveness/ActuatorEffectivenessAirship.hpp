@@ -94,7 +94,8 @@ public:
 	// negative x axis (|fz| < kTiltRearCone * |f|: a ratio, sin of the ~3 deg
 	// half-angle; floored at kTiltSteerRelease for low demand) the end that
 	// realizes the demand best is chosen and on a tie the committed end is
-	// kept, so perpendicular noise cannot command a full-range sweep. The same
+	// kept, so perpendicular noise cannot command a full-range sweep; when no
+	// end has a backward component the tilt is left where it is. The same
 	// margin, in pod-force units, is the hysteresis for switching range ends
 	// when the target falls outside the tilt range.
 	static constexpr float kTiltRearCone = 0.05f;
