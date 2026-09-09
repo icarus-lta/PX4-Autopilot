@@ -135,10 +135,10 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		fz[0] = fz[1] = thrust_up;
 	}
 
-	actuator_armed_s armed;
+	vehicle_status_s vehicle_status;
 
-	if (_actuator_armed_sub.update(&armed)) {
-		_armed = armed.armed;
+	if (_vehicle_status_sub.update(&vehicle_status)) {
+		_armed = vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED;
 	}
 
 	bool retargeted[2] {};	// the demand recomputed the tilt direction this update

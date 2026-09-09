@@ -34,6 +34,7 @@
 #include <gtest/gtest.h>
 #include "ActuatorEffectivenessAirship.hpp"
 #include <uORB/Publication.hpp>
+#include <uORB/topics/vehicle_status.h>
 
 using namespace matrix;
 
@@ -62,8 +63,24 @@ static constexpr int TAIL_COLLECTIVE_RUDDER = 5;
 // The allocator's dt ceiling: the largest step it hands the effectiveness [s]
 static constexpr float kDt = 0.02f;
 
+// The armed state is a persistent uORB sample the effectiveness reads on
+// its next update; the publication lives for the whole run so the topic
+// stays advertised (a subscriber only copies from an advertised topic)
+static void publishArmed(bool armed)
+{
+	static uORB::Publication<vehicle_status_s> pub{ORB_ID(vehicle_status)};
+	vehicle_status_s vehicle_status{};
+	vehicle_status.timestamp = hrt_absolute_time();
+	vehicle_status.arming_state = armed ? vehicle_status_s::ARMING_STATE_ARMED : vehicle_status_s::ARMING_STATE_DISARMED;
+	pub.publish(vehicle_status);
+}
+
 static void resetAirshipParams(float tilt_min_deg = -180.f, float tilt_max_deg = 180.f)
 {
+	// Armed unless a test disarms: the tilts park until vehicle_status
+	// reports armed
+	publishArmed(true);
+
 	// Disable autosaving parameters to avoid busy loop in param_set()
 	param_control_autosave(false);
 
@@ -115,23 +132,10 @@ static void setSurfaces()
 }
 
 // Disarm for the scope of a test and restore the armed baseline on exit,
-// even on an early failure: the armed state is a persistent uORB sample,
-// not a parameter, so resetAirshipParams() does not cover it. The
-// publication must outlive the updates that read it: a subscriber only
-// copies from a topic that is currently advertised
+// even on an early failure
 struct ScopedDisarm {
-	ScopedDisarm() { publish(false); }
-	~ScopedDisarm() { publish(true); }
-
-	void publish(bool armed)
-	{
-		actuator_armed_s msg{};
-		msg.timestamp = hrt_absolute_time();
-		msg.armed = armed;
-		_pub.publish(msg);
-	}
-
-	uORB::Publication<actuator_armed_s> _pub{ORB_ID(actuator_armed)};
+	ScopedDisarm() { publishArmed(false); }
+	~ScopedDisarm() { publishArmed(true); }
 };
 
 // The actuator layout is decided when the actuators are declared, so every
@@ -1429,7 +1433,7 @@ TEST(ActuatorEffectivenessAirshipTest, DisarmParksTiltLevel)
 	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
-	// Armed (default without an actuator_armed sample): full yaw couple
+	// Armed (resetAirshipParams publishes it): full yaw couple
 	Vector<float, 6> control_sp{};
 	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
