@@ -132,8 +132,9 @@ void AirshipAttitudeControl::publishRatesSetpoint(const float yaw_rate_sp, const
 float AirshipAttitudeControl::controlYawRate(const Vector3f &rates, const float yaw_rate_sp, const float dt)
 {
 	// No D term, so no angular acceleration (0 * NaN would poison the torque).
-	// landed = false: the land detector reports landed only where the loop is
-	// already open; windup while armed on the ground is not handled yet.
+	// landed = false: AirshipLandDetector reports landed only when disarmed or
+	// in AUTO_LAND, and neither passes yawRateLoopActive; windup while armed
+	// on the ground is not handled yet.
 	const Vector3f torque = _rate_control.update(rates, Vector3f(0.f, 0.f, yaw_rate_sp), Vector3f{}, dt, false);
 
 	return PX4_ISFINITE(torque(2)) ? torque(2) : 0.f;
