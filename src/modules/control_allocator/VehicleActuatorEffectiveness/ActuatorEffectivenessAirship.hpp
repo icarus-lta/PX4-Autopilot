@@ -91,6 +91,13 @@ private:
 	/** Refresh the armed state from vehicle_status */
 	bool isArmed();
 
+	/** Torque the clipped, trim-relative control-surface deflections deliver */
+	matrix::Vector3f surfaceTorque(const ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
+				       const ActuatorVector &actuator_max) const;
+
+	/** Body wrench of a pod force pair: the mean is thrust (x forward, z down), half the difference the roll/yaw couple */
+	static matrix::Vector<float, NUM_AXES> podWrench(const matrix::Vector2f &starboard, const matrix::Vector2f &port);
+
 	/** Write the tilt servos and read the clamped angles back; the collective servo drives both pods */
 	void writeTiltServos(ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
 			     const ActuatorVector &actuator_max);
@@ -125,11 +132,10 @@ private:
 	int _num_tilt_servos{0};
 	bool _surface_serves[3] {};	///< torque axes with control-surface effectiveness
 
-	matrix::Vector3f _surface_torque{};	///< torque the clipped, trim-relative surface deflections can deliver
+	matrix::Vector3f _surface_torque{};	///< torque the clipped, trim-relative surface deflections deliver
 	matrix::Vector3f _achieved_torque{};	///< torque the pods and tail delivered
 	matrix::Vector3f _held_torque{};	///< torque a pod held inside the steer band leaves unserved by choice
-	float _unallocated_torque[3] {};	///< sign of the roll/pitch/yaw shortfall left by the propulsors
-	float _unallocated_thrust[3] {};	///< sign of the x/y/z force shortfall left by the propulsors
+	matrix::Vector<float, NUM_AXES> _unallocated_control{};	///< shortfall per axis less the held share
 
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::CA_AIRSHIP_TLMIN>) _param_ca_airship_tlmin,

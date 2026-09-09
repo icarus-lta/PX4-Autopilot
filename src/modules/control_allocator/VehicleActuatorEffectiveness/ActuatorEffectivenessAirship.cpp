@@ -114,47 +114,64 @@ ActuatorEffectivenessAirship::isArmed()
 	return _armed;
 }
 
+Vector3f
+ActuatorEffectivenessAirship::surfaceTorque(const ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
+		const ActuatorVector &actuator_max) const
+{
+	// The allocator credits effectiveness * (setpoint - trim) after clipping,
+	// but this runs before clipActuatorSetpoint(): clip and trim locally so a
+	// saturated or trimmed surface is not credited torque it cannot deliver.
+	// A CA_SVn_SLEW on a surface runs later and stays invisible.
+	Vector3f torque{};
+
+	for (int i = 0; i < _control_surfaces.count(); i++) {
+		const int idx = _first_control_surface_idx + i;
+		const float deflection = math::constrain(actuator_sp(idx), actuator_min(idx), actuator_max(idx))
+					 - _control_surfaces.config(i).trim;
+		torque += _control_surfaces.config(i).torque * deflection;
+	}
+
+	return torque;
+}
+
+Vector<float, ActuatorEffectiveness::NUM_AXES>
+ActuatorEffectivenessAirship::podWrench(const Vector2f &starboard, const Vector2f &port)
+{
+	Vector<float, NUM_AXES> wrench{};
+	wrench(ControlAxis::ROLL) = 0.5f * (port(1) - starboard(1));
+	wrench(ControlAxis::PITCH) = 0.f;	// the pods produce no pitch torque
+	wrench(ControlAxis::YAW) = 0.5f * (port(0) - starboard(0));
+	wrench(ControlAxis::THRUST_X) = 0.5f * (starboard(0) + port(0));
+	wrench(ControlAxis::THRUST_Y) = 0.f;	// no lateral actuator
+	wrench(ControlAxis::THRUST_Z) = -(0.5f * (starboard(1) + port(1)));	// z down
+	return wrench;
+}
+
 void
 ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXES> &control_sp,
 		int matrix_index, ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
 		const ActuatorVector &actuator_max)
 {
-	const float thrust_forward = control_sp(ControlAxis::THRUST_X);
-	const float thrust_up = -control_sp(ControlAxis::THRUST_Z);
-
-	_surface_torque.setZero();
-
-	for (int i = 0; i < _control_surfaces.count(); i++) {
-		const int idx = _first_control_surface_idx + i;
-
-		// The allocator credits effectiveness * (setpoint - trim) after
-		// clipping, but this runs before clipActuatorSetpoint(): clip and
-		// trim locally so a saturated or trimmed surface is not credited
-		// torque it cannot deliver. A CA_SVn_SLEW on a surface runs later
-		// and stays invisible.
-		const float deflection = math::constrain(actuator_sp(idx), actuator_min(idx), actuator_max(idx))
-					 - _control_surfaces.config(i).trim;
-		_surface_torque += _control_surfaces.config(i).torque * deflection;
-	}
-
+	_surface_torque = surfaceTorque(actuator_sp, actuator_min, actuator_max);
 	const float credit = _param_ca_airship_cs_k.get();
 
-	const float yaw = control_sp(ControlAxis::YAW) - credit * _surface_torque(2);
-	const float roll = control_sp(ControlAxis::ROLL) - credit * _surface_torque(0);
+	// The pods and the tail serve what the credited surfaces leave
+	Vector<float, NUM_AXES> demand = control_sp;
 
-	float fx[NUM_PODS] = {thrust_forward - yaw, thrust_forward + yaw};	// starboard, port
-	float fz[NUM_PODS] = {thrust_up - roll, thrust_up + roll};
-
-	if (_grouping == Grouping::Collective) {
-		fx[STARBOARD] = fx[PORT] = thrust_forward;
-		fz[STARBOARD] = fz[PORT] = thrust_up;
+	for (int axis = 0; axis < 3; axis++) {
+		demand(axis) -= credit * _surface_torque(axis);
 	}
+
+	const Vector2f common{demand(ControlAxis::THRUST_X), -demand(ControlAxis::THRUST_Z)};
+	const Vector2f differential = _grouping == Grouping::Independent
+				      ? Vector2f{demand(ControlAxis::YAW), demand(ControlAxis::ROLL)} : Vector2f{};
+	const Vector2f pod_demand[NUM_PODS] = {common - differential, common + differential};
 
 	const bool armed = isArmed();
 
 	for (int i = 0; i < NUM_PODS; i++) {
 		if (armed) {
-			_pods[i].steer(Vector2f{fx[i], fz[i]}, _dt);
+			_pods[i].steer(pod_demand[i], _dt);
 
 		} else {
 			_pods[i].park(_dt);
@@ -163,54 +180,39 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 
 	writeTiltServos(actuator_sp, actuator_min, actuator_max);
 
-	float achieved_x[NUM_PODS] {};
-	float achieved_z[NUM_PODS] {};
+	Vector2f achieved[NUM_PODS] {};
+	Vector2f held[NUM_PODS] {};
 
 	for (int i = 0; i < NUM_PODS; i++) {
 		const Vector2f axis = _pods[i].thrustAxis();
-		const float thrust = fx[i] * axis(0) + fz[i] * axis(1);
+		const float thrust = pod_demand[i](0) * axis(0) + pod_demand[i](1) * axis(1);
 
 		// non-reversible propellers: reverse only by tilting, the CA_R_REV pod bits are not honored
 		actuator_sp(i) = math::constrain(thrust, math::max(actuator_min(i), 0.f), actuator_max(i));
+		achieved[i] = axis * actuator_sp(i);
 
-		achieved_x[i] = actuator_sp(i) * axis(0);
-		achieved_z[i] = actuator_sp(i) * axis(1);
-	}
-
-	float achieved_yaw = 0.5f * (achieved_x[PORT] - achieved_x[STARBOARD]);
-
-	if (_has_tail) {
-		// the tail serves the yaw the pods leave; reverse authority comes from CA_R_REV
-		actuator_sp(TAIL) = math::constrain(yaw - achieved_yaw, actuator_min(TAIL), actuator_max(TAIL));
-		achieved_yaw += actuator_sp(TAIL);
-	}
-
-	// The pods produce no pitch torque
-	_achieved_torque = Vector3f(0.5f * (achieved_z[PORT] - achieved_z[STARBOARD]), 0.f, achieved_yaw);
-
-	float held_x[NUM_PODS] {};
-	float held_z[NUM_PODS] {};
-
-	for (int i = 0; i < NUM_PODS; i++) {
 		if (_num_tilt_servos > 0 && _pods[i].heldInBand()) {
-			held_x[i] = fx[i] - achieved_x[i];
-			held_z[i] = fz[i] - achieved_z[i];
+			held[i] = pod_demand[i] - achieved[i];
 		}
 	}
 
-	const float achieved_forward = 0.5f * (achieved_x[STARBOARD] + achieved_x[PORT]);
-	const float achieved_up = 0.5f * (achieved_z[STARBOARD] + achieved_z[PORT]);
-	const float held_forward = 0.5f * (held_x[STARBOARD] + held_x[PORT]);
-	const float held_up = 0.5f * (held_z[STARBOARD] + held_z[PORT]);
+	Vector<float, NUM_AXES> achieved_wrench = podWrench(achieved[STARBOARD], achieved[PORT]);
 
-	_held_torque = Vector3f(0.5f * (held_z[PORT] - held_z[STARBOARD]), 0.f, 0.5f * (held_x[PORT] - held_x[STARBOARD]));
+	if (_has_tail) {
+		// the tail serves the yaw the pods leave; reverse authority comes from CA_R_REV
+		actuator_sp(TAIL) = math::constrain(demand(ControlAxis::YAW) - achieved_wrench(ControlAxis::YAW),
+						    actuator_min(TAIL), actuator_max(TAIL));
+		achieved_wrench(ControlAxis::YAW) += actuator_sp(TAIL);
+	}
 
-	_unallocated_thrust[0] = saturationSign(discountHeld(thrust_forward - achieved_forward, held_forward));
-	_unallocated_thrust[1] = saturationSign(control_sp(ControlAxis::THRUST_Y));	// no lateral actuator
-	_unallocated_thrust[2] = saturationSign(-discountHeld(thrust_up - achieved_up, held_up));	// z down
-	_unallocated_torque[0] = saturationSign(discountHeld(roll - _achieved_torque(0), _held_torque(0)));
-	_unallocated_torque[1] = saturationSign(control_sp(ControlAxis::PITCH));
-	_unallocated_torque[2] = saturationSign(discountHeld(yaw - _achieved_torque(2), _held_torque(2)));
+	const Vector<float, NUM_AXES> held_wrench = podWrench(held[STARBOARD], held[PORT]);
+
+	for (int axis = 0; axis < NUM_AXES; axis++) {
+		_unallocated_control(axis) = discountHeld(demand(axis) - achieved_wrench(axis), held_wrench(axis));
+	}
+
+	_achieved_torque = achieved_wrench.slice<3, 1>(0, 0);
+	_held_torque = held_wrench.slice<3, 1>(0, 0);
 }
 
 void
@@ -270,15 +272,10 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 	const float uncredited = 1.f - _param_ca_airship_cs_k.get();
 
 	for (int axis = 0; axis < 3; axis++) {
-		if (_surface_serves[axis]) {
-			status.unallocated_torque[axis] = discountHeld(status.unallocated_torque[axis]
-							  + uncredited * _surface_torque(axis) - _achieved_torque(axis),
-							  _held_torque(axis));
-
-		} else {
-			status.unallocated_torque[axis] = _unallocated_torque[axis];
-		}
-
-		status.unallocated_thrust[axis] = _unallocated_thrust[axis];
+		status.unallocated_torque[axis] = _surface_serves[axis]
+						  ? discountHeld(status.unallocated_torque[axis] + uncredited * _surface_torque(axis)
+								  - _achieved_torque(axis), _held_torque(axis))
+						  : saturationSign(_unallocated_control(axis));
+		status.unallocated_thrust[axis] = saturationSign(_unallocated_control(ControlAxis::THRUST_X + axis));
 	}
 }
