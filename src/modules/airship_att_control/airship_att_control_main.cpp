@@ -132,10 +132,8 @@ void AirshipAttitudeControl::publishRatesSetpoint(const float yaw_rate_sp, const
 float AirshipAttitudeControl::controlYawRate(const Vector3f &rates, const float yaw_rate_sp, const float dt)
 {
 	// No D term, so no angular acceleration (0 * NaN would poison the torque).
-	// landed = false: AirshipLandDetector reports landed only when disarmed or
-	// in AUTO_LAND, and the loop is open in both (loopActive, reset in Run),
-	// so the flag would add nothing; windup while armed on the ground is not
-	// handled yet.
+	// landed = false: the land detector reports landed only where the loop is
+	// already open; windup while armed on the ground is not handled yet.
 	const Vector3f torque = _rate_control.update(rates, Vector3f(0.f, 0.f, yaw_rate_sp), Vector3f{}, dt, false);
 
 	return PX4_ISFINITE(torque(2)) ? torque(2) : 0.f;
@@ -208,11 +206,11 @@ AirshipAttitudeControl::Run()
 		publishThrustSetpoint(thrust, angular_velocity.timestamp_sample);
 
 		// Yaw: rate loop where the mode asks for rates, otherwise the stick is the torque
-		const bool yaw_loop_active = airship_yaw_rate::loopActive(_vehicle_control_mode, manual_input_usable);
+		const bool yaw_loop_active = airship_manual_input::yawRateLoopActive(_vehicle_control_mode, manual_input_usable);
 
 		if (yaw_loop_active) {
 			updateSaturationStatus();
-			const float yaw_rate_sp = airship_yaw_rate::setpointFromStick(_manual_control_setpoint.yaw,
+			const float yaw_rate_sp = airship_manual_input::yawRateSetpoint(_manual_control_setpoint.yaw,
 						  _param_man_deadzone.get(), _yaw_rate_max);
 			torque(2) = controlYawRate(Vector3f{angular_velocity.xyz}, yaw_rate_sp, dt);
 
@@ -222,14 +220,14 @@ AirshipAttitudeControl::Run()
 
 			publishRateControlStatus();
 
-		} else if (_yaw_loop_active) {
-			// The loop just opened: clear the integrator (it only changes while
-			// the loop is closed) and publish once so it does not read as frozen
+		} else if (_yaw_loop_was_active) {
+			// The loop just opened: clear the integrator (it only moves while the
+			// loop is closed) and publish once so the status does not read as frozen
 			_rate_control.resetIntegral();
 			publishRateControlStatus();
 		}
 
-		_yaw_loop_active = yaw_loop_active;
+		_yaw_loop_was_active = yaw_loop_active;
 
 		publishTorqueSetpoint(torque, angular_velocity.timestamp_sample);
 

@@ -34,7 +34,6 @@
 #pragma once
 
 #include "airship_manual_input.hpp"
-#include "airship_yaw_rate.hpp"
 
 #include <lib/mathlib/mathlib.h>
 #include <lib/matrix/matrix/math.hpp>
@@ -111,10 +110,8 @@ private:
 	/** Integrator state for logging */
 	void publishRateControlStatus();
 
-	// The sticks stay live in every armed mode because no other module
-	// serves the airship outside manual, but lost or never-published input
-	// (which keeps its last finite values and only clears .valid) must
-	// read as released, not be flown indefinitely.
+	// The sticks stay live in every armed mode; lost or never-published input
+	// keeps its last values and only clears .valid, so it must read as released
 	bool manualInputUsable() const { return _vehicle_control_mode.flag_armed && _manual_control_setpoint.valid; }
 
 	RateControl _rate_control; ///< yaw axis only: roll and pitch gains stay zero
@@ -136,7 +133,7 @@ private:
 
 	hrt_abstime _last_run{0};
 	float _yaw_rate_max{0.f};		///< AS_YAWRATE_MAX [rad/s]
-	bool _yaw_loop_active{false};		///< the yaw rate loop closed on the previous cycle
+	bool _yaw_loop_was_active{false};	///< the yaw rate loop was closed on the previous cycle
 
 	perf_counter_t _loop_perf;
 

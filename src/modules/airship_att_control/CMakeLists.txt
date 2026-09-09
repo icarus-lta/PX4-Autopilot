@@ -39,7 +39,6 @@ px4_add_module(
 	SRCS
 		airship_att_control_main.cpp
 		airship_manual_input.hpp
-		airship_yaw_rate.hpp
 	MODULE_CONFIG
 		airship_att_control_params.yaml
 	DEPENDS
@@ -49,4 +48,3 @@ px4_add_module(
 	)
 
 px4_add_unit_gtest(SRC AirshipManualInputTest.cpp LINKLIBS modules__airship_att_control)
-px4_add_unit_gtest(SRC AirshipYawRateTest.cpp LINKLIBS modules__airship_att_control)

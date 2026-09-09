@@ -37,6 +37,9 @@
 
 using namespace airship_manual_input;
 
+static constexpr float kMaxRate = math::radians(15.f); // AS_YAWRATE_MAX default, as the module converts it
+static constexpr float kDeadzone = 0.1f;
+
 static manual_control_setpoint_s sticks(float roll, float pitch, float yaw, float throttle)
 {
 	manual_control_setpoint_s setpoint{};
@@ -83,4 +86,65 @@ TEST(AirshipManualInputTest, UnavailableChannelReadsAsReleased)
 	EXPECT_FLOAT_EQ(torque(unavailable)(0), 0.f);
 	EXPECT_FLOAT_EQ(torque(unavailable)(1), 0.f);
 	EXPECT_FLOAT_EQ(torque(unavailable)(2), 0.f);
+}
+
+TEST(AirshipManualInputTest, ReleasedStickCommandsZero)
+{
+	// Anything inside the deadzone, band edge included, is exactly zero
+	EXPECT_FLOAT_EQ(yawRateSetpoint(0.f, kDeadzone, kMaxRate), 0.f);
+	EXPECT_FLOAT_EQ(yawRateSetpoint(0.05f, kDeadzone, kMaxRate), 0.f);
+	EXPECT_FLOAT_EQ(yawRateSetpoint(-0.099f, kDeadzone, kMaxRate), 0.f);
+	EXPECT_FLOAT_EQ(yawRateSetpoint(kDeadzone, kDeadzone, kMaxRate), 0.f);
+	EXPECT_FLOAT_EQ(yawRateSetpoint(-kDeadzone, kDeadzone, kMaxRate), 0.f);
+}
+
+TEST(AirshipManualInputTest, LinearAndContinuousOutsideDeadzone)
+{
+	// Just outside the band the output leaves zero continuously
+	EXPECT_NEAR(yawRateSetpoint(0.1001f, kDeadzone, kMaxRate), 0.f, 1e-3f);
+	// Mid travel is rescaled over the remaining range: (0.55 - 0.1) / 0.9 = 0.5
+	EXPECT_NEAR(yawRateSetpoint(0.55f, kDeadzone, kMaxRate), 0.5f * kMaxRate, 1e-5f);
+	// Full stick reaches the full rate, symmetric in sign
+	EXPECT_FLOAT_EQ(yawRateSetpoint(1.f, kDeadzone, kMaxRate), kMaxRate);
+	EXPECT_FLOAT_EQ(yawRateSetpoint(-1.f, kDeadzone, kMaxRate), -kMaxRate);
+	EXPECT_FLOAT_EQ(yawRateSetpoint(-0.55f, kDeadzone, kMaxRate),
+			-yawRateSetpoint(0.55f, kDeadzone, kMaxRate));
+}
+
+TEST(AirshipManualInputTest, NoDeadzoneIsPlainLinear)
+{
+	EXPECT_FLOAT_EQ(yawRateSetpoint(0.25f, 0.f, kMaxRate), 0.25f * kMaxRate);
+}
+
+TEST(AirshipManualInputTest, NonFiniteStickReadsAsReleased)
+{
+	EXPECT_FLOAT_EQ(yawRateSetpoint(NAN, kDeadzone, kMaxRate), 0.f);
+	EXPECT_FLOAT_EQ(yawRateSetpoint(INFINITY, kDeadzone, kMaxRate), 0.f);
+}
+
+TEST(AirshipManualInputTest, LoopClosesInManualRateModes)
+{
+	vehicle_control_mode_s mode{};
+	mode.flag_control_manual_enabled = true;
+	mode.flag_control_rates_enabled = true;
+	EXPECT_TRUE(yawRateLoopActive(mode, true)); // Acro
+
+	// Stabilized (and Altitude, Position): no heading loop exists yet, so
+	// the stick still feeds the rate loop
+	mode.flag_control_attitude_enabled = true;
+	EXPECT_TRUE(yawRateLoopActive(mode, true));
+}
+
+TEST(AirshipManualInputTest, LoopStaysOpenWithoutRatesOrPilot)
+{
+	vehicle_control_mode_s mode{};
+	mode.flag_control_manual_enabled = true;
+	EXPECT_FALSE(yawRateLoopActive(mode, true)); // Manual: rates off, torque passthrough
+
+	mode.flag_control_rates_enabled = true;
+	mode.flag_control_manual_enabled = false;
+	EXPECT_FALSE(yawRateLoopActive(mode, true)); // Hold, Land, Descend: manual input not mixed in
+
+	mode.flag_control_manual_enabled = true;
+	EXPECT_FALSE(yawRateLoopActive(mode, false)); // disarmed or lost sticks
 }
