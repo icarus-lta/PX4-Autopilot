@@ -34,15 +34,18 @@
 /**
  * @file airship_manual_input.hpp
  *
- * Stick to thrust and torque setpoint mapping of the manual passthrough,
- * kept free of uORB I/O so it can be unit tested.
+ * How the airship reads the sticks: the thrust and torque passthrough, the
+ * yaw stick as a rate setpoint and the gate of the yaw rate loop, kept free
+ * of uORB I/O so they can be unit tested.
  */
 
 #pragma once
 
+#include <lib/mathlib/mathlib.h>
 #include <lib/matrix/matrix/math.hpp>
 #include <px4_platform_common/defines.h>
 #include <uORB/topics/manual_control_setpoint.h>
+#include <uORB/topics/vehicle_control_mode.h>
 
 namespace airship_manual_input
 {
@@ -74,6 +77,29 @@ inline matrix::Vector3f thrust(const manual_control_setpoint_s &sticks)
 inline matrix::Vector3f torque(const manual_control_setpoint_s &sticks)
 {
 	return matrix::Vector3f{finiteOr(sticks.roll, 0.f), -finiteOr(sticks.pitch, 0.f), finiteOr(sticks.yaw, 0.f)};
+}
+
+/**
+ * Map the yaw stick to a yaw rate setpoint [rad/s].
+ *
+ * Deadzone first (MAN_DEADZONE, as mc_att_control and lib/sticks apply it),
+ * then linear scaling to max_rate; a non-finite stick reads as released.
+ */
+inline float yawRateSetpoint(float stick, float deadzone, float max_rate)
+{
+	return math::deadzone(finiteOr(stick, 0.f), deadzone) * max_rate;
+}
+
+/**
+ * Whether the yaw rate loop closes on the stick: manual modes with rate
+ * control (Acro, Stabilized, Altitude, Position). Manual has rates off and
+ * the non-manual modes have no setpoint source here yet; both keep the
+ * torque passthrough.
+ */
+inline bool yawRateLoopActive(const vehicle_control_mode_s &control_mode, bool manual_input_usable)
+{
+	return manual_input_usable && control_mode.flag_control_manual_enabled
+	       && control_mode.flag_control_rates_enabled;
 }
 
 } // namespace airship_manual_input
