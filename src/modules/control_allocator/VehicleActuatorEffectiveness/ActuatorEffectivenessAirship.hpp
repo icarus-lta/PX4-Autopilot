@@ -59,7 +59,7 @@
 #include <lib/slew_rate/SlewRate.hpp>
 #include <px4_platform_common/module_params.h>
 #include <uORB/Subscription.hpp>
-#include <uORB/topics/actuator_armed.h>
+#include <uORB/topics/vehicle_status.h>
 
 class ActuatorEffectivenessAirship : public ModuleParams, public ActuatorEffectiveness
 {
@@ -123,15 +123,10 @@ private:
 	float _tilt_target[2] {};	///< commanded tilt [rad] the slew tracks; holds through the hysteresis band
 	bool _tilt_steering[2] {};	///< per-pod hysteresis state of the direction hold
 
-	// Unlike the spool-up siblings, the disarmed branch is the active one
-	// here (it parks the tilts), so the default is the no-op: it only shows
-	// where nothing publishes actuator_armed, i.e. the unit tests, which
-	// must steer. On a vehicle the commander's boot sample (disarmed) is
-	// read on the first update and parks the pods.
-	bool _armed{true};
+	bool _armed{false};		///< the tilts park until vehicle_status reports armed, as the tiltrotor holds its tilts
 	float _dt{0.f};		///< allocator time step [s], handed in right before updateSetpoint()
 
-	uORB::Subscription _actuator_armed_sub{ORB_ID(actuator_armed)};
+	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
 
 	ActuatorEffectivenessControlSurfaces _control_surfaces;
 
