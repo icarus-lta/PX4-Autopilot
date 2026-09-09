@@ -39,13 +39,13 @@
 using namespace matrix;
 
 // Actuator indices
-static constexpr int MOTOR_STARBOARD = 0;
-static constexpr int MOTOR_PORT = 1;
+static constexpr int MOTOR_STARBOARD = ActuatorEffectivenessAirship::STARBOARD;
+static constexpr int MOTOR_PORT = ActuatorEffectivenessAirship::PORT;
 static constexpr int TILT_STARBOARD = 2;
 static constexpr int TILT_PORT = 3;
 
 // With the tail thruster (CA_AIRSHIP_TAIL) the tilts shift by one
-static constexpr int MOTOR_TAIL = 2;
+static constexpr int MOTOR_TAIL = ActuatorEffectivenessAirship::TAIL;
 static constexpr int TAIL_TILT_STARBOARD = 3;
 static constexpr int TAIL_TILT_PORT = 4;
 
@@ -959,7 +959,7 @@ TEST(ActuatorEffectivenessAirshipTest, RollSteerBandShortfallIsNotSaturation)
 	// Level pods deliver none of a roll demand below the steer floor: the
 	// unmet demand is the band's own choice, not saturation
 	Vector<float, 6> control_sp{};
-	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.75f * ActuatorEffectivenessAirship::kTiltSteerEngage;
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.75f * AirshipPod::kSteerEngage;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
@@ -972,12 +972,12 @@ TEST(ActuatorEffectivenessAirshipTest, RollSteerBandShortfallIsNotSaturation)
 	EXPECT_FLOAT_EQ(status.unallocated_torque[0], 0.f);
 
 	// Over the floor the pods vector straight down and up and serve it exactly
-	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 2.f * ActuatorEffectivenessAirship::kTiltSteerEngage;
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 2.f * AirshipPod::kSteerEngage;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), -0.5f); // -90 deg, down
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.5f);       // +90 deg, up
-	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 2.f * ActuatorEffectivenessAirship::kTiltSteerEngage, 1e-6f);
-	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 2.f * ActuatorEffectivenessAirship::kTiltSteerEngage, 1e-6f);
+	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 2.f * AirshipPod::kSteerEngage, 1e-6f);
+	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 2.f * AirshipPod::kSteerEngage, 1e-6f);
 	airship.getUnallocatedControl(0, status);
 	EXPECT_FLOAT_EQ(status.unallocated_torque[0], 0.f);
 }
@@ -998,7 +998,7 @@ TEST(ActuatorEffectivenessAirshipTest, RollSurfaceServedBandShortfallIsNotSatura
 	// the aileron's allocation is credited, leaving half the demand for the
 	// pods, which is inside the steer band: they hold level and deliver none
 	Vector<float, 6> control_sp{};
-	const float demand = ActuatorEffectivenessAirship::kTiltSteerEngage;
+	const float demand = AirshipPod::kSteerEngage;
 	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = demand;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 	actuator_sp(SURFACE_FIRST) = demand; // the matrix allocates the full demand to the unit aileron
@@ -1146,7 +1146,7 @@ TEST(ActuatorEffectivenessAirshipTest, DemandAtReleaseThresholdDoesNotHoldSteeri
 	// A demand exactly at the release threshold releases (the hold is a
 	// strict comparison): the tilts stay where they are, in either sign
 	for (const float sign : {1.f, -1.f}) {
-		control_sp(ActuatorEffectiveness::ControlAxis::YAW) = sign * ActuatorEffectivenessAirship::kTiltSteerRelease;
+		control_sp(ActuatorEffectiveness::ControlAxis::YAW) = sign * AirshipPod::kSteerRelease;
 		runUpdateSetpoint(airship, control_sp, actuator_sp);
 		EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 		EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
@@ -1168,12 +1168,12 @@ TEST(ActuatorEffectivenessAirshipTest, SteerHysteresisBand)
 	// Inside the band the last commanded direction stands: a reversed
 	// demand below the engage floor must not retarget the tilt
 	control_sp(ActuatorEffectiveness::ControlAxis::YAW) =
-		-0.5f * (ActuatorEffectivenessAirship::kTiltSteerEngage + ActuatorEffectivenessAirship::kTiltSteerRelease);
+		-0.5f * (AirshipPod::kSteerEngage + AirshipPod::kSteerRelease);
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 
 	// Below the release threshold the hold takes over
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.5f * ActuatorEffectivenessAirship::kTiltSteerRelease;
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.5f * AirshipPod::kSteerRelease;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 
@@ -1225,7 +1225,7 @@ TEST(ActuatorEffectivenessAirshipTest, RearDemandNoiseKeepsChosenEnd)
 	// Perpendicular noise flips the sign of the small fz component: the
 	// committed end must hold, not swing across the whole range
 	for (int step = -2; step <= 2; step++) {
-		control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.05f * ActuatorEffectivenessAirship::kTiltRearCone * step;
+		control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.05f * AirshipPod::kEndSwitchMargin * step;
 		runUpdateSetpoint(airship, control_sp, actuator_sp);
 		EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 		EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 1.f);
@@ -1248,10 +1248,10 @@ TEST(ActuatorEffectivenessAirshipTest, SlewKeepsCommittedEnd)
 
 	// Noise on the perpendicular axis while the servo is still slewing
 	// must not re-decide the end: the tilt keeps moving the same way
-	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.1f * ActuatorEffectivenessAirship::kTiltRearCone;
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.1f * AirshipPod::kEndSwitchMargin;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_GT(actuator_sp(TILT_STARBOARD), first);
-	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = -0.1f * ActuatorEffectivenessAirship::kTiltRearCone;
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = -0.1f * AirshipPod::kEndSwitchMargin;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_GT(actuator_sp(TILT_STARBOARD), first);
 }
@@ -1363,7 +1363,7 @@ TEST(ActuatorEffectivenessAirshipTest, TiltRangeNarrowedAtRuntimeReclampsHeldTil
 	param_set(param_find("CA_AIRSHIP_TLMAX"), &zero);
 	airship.updateParams();
 
-	const float below_release = 0.5f * ActuatorEffectivenessAirship::kTiltSteerRelease;
+	const float below_release = 0.5f * AirshipPod::kSteerRelease;
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = below_release;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), below_release);
@@ -1416,7 +1416,7 @@ TEST(ActuatorEffectivenessAirshipTest, RearConeBoundaryKeepsCommittedEnd)
 	for (int step = 0; step <= 3; step++) {
 		SCOPED_TRACE(::testing::Message() << "step=" << step);
 		control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) =
-			-0.4f * ActuatorEffectivenessAirship::kTiltRearCone * step;
+			-0.4f * AirshipPod::kEndSwitchMargin * step;
 		runUpdateSetpoint(airship, control_sp, actuator_sp);
 		EXPECT_FLOAT_EQ(actuator_sp(COLLECTIVE_TILT), -1.f);
 	}
@@ -1438,10 +1438,10 @@ TEST(ActuatorEffectivenessAirshipTest, NegativeEndCommitmentHeld)
 
 	// Straight back inside the cone must hold the -180 end, whichever
 	// way the perpendicular noise points
-	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.1f * ActuatorEffectivenessAirship::kTiltRearCone;
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.1f * AirshipPod::kEndSwitchMargin;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), -1.f);
-	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = -0.1f * ActuatorEffectivenessAirship::kTiltRearCone;
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = -0.1f * AirshipPod::kEndSwitchMargin;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), -1.f);
 }
@@ -1522,13 +1522,13 @@ TEST(ActuatorEffectivenessAirshipTest, SteerBandShortfallIsNotSaturation)
 	// the port pod alone, the starboard pod would need the reversal the band
 	// deliberately withholds
 	Vector<float, 6> control_sp{};
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.75f * ActuatorEffectivenessAirship::kTiltSteerEngage;
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.75f * AirshipPod::kSteerEngage;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
-	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.75f * ActuatorEffectivenessAirship::kTiltSteerEngage, 1e-6f);
+	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.75f * AirshipPod::kSteerEngage, 1e-6f);
 
 	// The unmet half is the band's own choice, not saturation: the rate
 	// controller's integrator must stay free to lift the demand over the floor
@@ -1538,7 +1538,7 @@ TEST(ActuatorEffectivenessAirshipTest, SteerBandShortfallIsNotSaturation)
 	EXPECT_FLOAT_EQ(status.unallocated_thrust[0], 0.f);
 
 	// Over the floor the steering engages and the exact couple is served
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 2.f * ActuatorEffectivenessAirship::kTiltSteerEngage;
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 2.f * AirshipPod::kSteerEngage;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 	airship.getUnallocatedControl(0, status);
@@ -1557,7 +1557,7 @@ TEST(ActuatorEffectivenessAirshipTest, SteerBandVerticalShortfallIsNotSaturation
 		SCOPED_TRACE(::testing::Message() << "sign=" << sign);
 		Vector<float, 6> control_sp{};
 		control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = sign * 0.75f *
-				ActuatorEffectivenessAirship::kTiltSteerEngage;
+				AirshipPod::kSteerEngage;
 		ActuatorEffectiveness::ActuatorVector actuator_sp{};
 		runUpdateSetpoint(airship, control_sp, actuator_sp);
 		EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
@@ -1610,7 +1610,7 @@ TEST(ActuatorEffectivenessAirshipTest, HysteresisBandReversalIsNotSaturation)
 	// directions, which now project both pods away: motors off, no torque.
 	// That is the band holding by choice, not saturation
 	control_sp(ActuatorEffectiveness::ControlAxis::YAW) =
-		-0.5f * (ActuatorEffectivenessAirship::kTiltSteerEngage + ActuatorEffectivenessAirship::kTiltSteerRelease);
+		-0.5f * (AirshipPod::kSteerEngage + AirshipPod::kSteerRelease);
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
@@ -1639,7 +1639,7 @@ TEST(ActuatorEffectivenessAirshipTest, SwingContinuedInBandIsSaturation)
 	// swinging toward it, so the couple is still not delivered. A moving
 	// tilt is a real, transient shortfall
 	control_sp(ActuatorEffectiveness::ControlAxis::YAW) =
-		0.5f * (ActuatorEffectivenessAirship::kTiltSteerEngage + ActuatorEffectivenessAirship::kTiltSteerRelease);
+		0.5f * (AirshipPod::kSteerEngage + AirshipPod::kSteerRelease);
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_GT(actuator_sp(TILT_STARBOARD), first);
 
@@ -1656,7 +1656,7 @@ TEST(ActuatorEffectivenessAirshipTest, FixedMountInBandShortfallStands)
 	// Fixed forward pods cannot reverse at all: the half the starboard motor
 	// cannot deliver is structural even below the steer floor
 	Vector<float, 6> control_sp{};
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.75f * ActuatorEffectivenessAirship::kTiltSteerEngage;
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.75f * AirshipPod::kSteerEngage;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
@@ -1676,12 +1676,12 @@ TEST(ActuatorEffectivenessAirshipTest, OnePodHeldInBandIsNotSaturation)
 	// the band and holds level. The starboard shortfall is the band's choice
 	Vector<float, 6> control_sp{};
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = 0.3f;
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.3f + 0.5f * ActuatorEffectivenessAirship::kTiltSteerEngage;
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.3f + 0.5f * AirshipPod::kSteerEngage;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
-	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.6f + 0.5f * ActuatorEffectivenessAirship::kTiltSteerEngage, 1e-6f);
+	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.6f + 0.5f * AirshipPod::kSteerEngage, 1e-6f);
 
 	control_allocator_status_s status{};
 	airship.getUnallocatedControl(0, status);
@@ -1718,7 +1718,7 @@ TEST(ActuatorEffectivenessAirshipTest, CollectiveYawShortfallStandsInSteerBand)
 	// Collective pods cannot yaw at all: a small demand below the steer
 	// floor is structurally unserved and must still be reported
 	Vector<float, 6> control_sp{};
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.5f * ActuatorEffectivenessAirship::kTiltSteerEngage;
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.5f * AirshipPod::kSteerEngage;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 
@@ -1739,7 +1739,7 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceServedBandShortfallIsNotSaturation
 	// which is inside the steer band: they hold level and the starboard
 	// motor clips, so only half of that arrives
 	Vector<float, 6> control_sp{};
-	const float demand = ActuatorEffectivenessAirship::kTiltSteerEngage;
+	const float demand = AirshipPod::kSteerEngage;
 	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = demand;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 	actuator_sp(SURFACE_RUDDER) = demand; // the matrix allocates the full demand to the unit rudder

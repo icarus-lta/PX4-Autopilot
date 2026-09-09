@@ -34,29 +34,24 @@
 /**
  * @file ActuatorEffectivenessAirship.hpp
  *
- * Actuator effectiveness for an airship with two side propulsion pods
- * symmetric about the CoG, each on a non-reversible propeller that tilts
- * about the body y axis (0 = thrust forward, positive = up), optionally a
- * tail yaw thruster (motor 3) and control surfaces.
- *
- * The pods are allocated in closed form in updateSetpoint(): the demand is
- * split into a per-pod force, index 0 = starboard and 1 = port, as
- * fx = thrust_x -/+ yaw and fz = thrust_up -/+ roll with thrust_up = -thrust_z,
- * yaw and roll net of the credited control-surface torque, all normalized.
- * The tilt is the direction of that force and the motor its projection onto
- * the realized tilt, so the pods produce no pitch torque and reach reverse
- * thrust only by tilting. Collective grouping (CA_AIRSHIP_GRP = 0) gives both
- * pods the same force on one tilt servo. Control surfaces are allocated by
- * the matrix; the pods and the tail serve what they leave unmet.
+ * Airship with two side propulsion pods symmetric about the CoG (0 =
+ * starboard, 1 = port), each a non-reversible propeller on a tilt servo
+ * (AirshipPod), an optional tail yaw thruster (motor 3) and control
+ * surfaces. The pod force is (thrust_x, -thrust_z) -/+ (yaw, roll), net of
+ * the credited control-surface torque, all normalized; collective grouping
+ * gives both pods the common force on one servo. Motors and tilts are
+ * declared with zero effectiveness and computed in updateSetpoint(); the
+ * pods produce no pitch torque and reverse only by tilting. The surfaces
+ * are allocated by the matrix; the pods and the tail serve what they leave.
  */
 
 #pragma once
 
 #include "control_allocation/actuator_effectiveness/ActuatorEffectiveness.hpp"
 #include "ActuatorEffectivenessControlSurfaces.hpp"
+#include "AirshipPod.hpp"
 
 #include <lib/mathlib/mathlib.h>
-#include <lib/slew_rate/SlewRate.hpp>
 #include <px4_platform_common/module_params.h>
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/vehicle_status.h>
@@ -64,7 +59,16 @@
 class ActuatorEffectivenessAirship : public ModuleParams, public ActuatorEffectiveness
 {
 public:
-	ActuatorEffectivenessAirship(ModuleParams *parent) : ModuleParams(parent), _control_surfaces(this) {}
+	static constexpr int NUM_PODS = 2;
+	enum MotorIndex { STARBOARD = 0, PORT = 1, TAIL = 2 };
+
+	enum class Grouping : int32_t {
+		// This matches with the parameter CA_AIRSHIP_GRP
+		Collective = 0,
+		Independent = 1,
+	};
+
+	ActuatorEffectivenessAirship(ModuleParams *parent);
 	virtual ~ActuatorEffectivenessAirship() = default;
 
 	bool getEffectivenessMatrix(Configuration &configuration, EffectivenessUpdateReason external_update) override;
@@ -80,67 +84,49 @@ public:
 
 	const char *name() const override { return "Airship"; }
 
-	// The tilt direction is the atan2 of the pod force demand, which is
-	// meaningless near zero magnitude: stick noise alone would slam the tilt
-	// between opposite directions. Steering therefore engages only above the
-	// stick-noise floor and releases at half of it; inside the band the last
-	// commanded direction stands, so a sign reversal there cannot retarget.
-	// What a held pod projects away is not reported as saturation.
-	static constexpr float kTiltSteerEngage = 0.02f;
-	static constexpr float kTiltSteerRelease = 0.01f;
-
-	// Pointing (near-)straight back, +180 and -180 deg realize the same thrust
-	// direction at opposite ends of an end-stop servo: inside this cone of the
-	// negative x axis (|fz| < kTiltRearCone * |f|: a ratio, sin of the ~3 deg
-	// half-angle; floored at kTiltSteerRelease for low demand) the end that
-	// realizes the demand best is chosen and on a tie the committed end is
-	// kept, so perpendicular noise cannot command a full-range sweep; when no
-	// end has a backward component the tilt is left where it is. The same
-	// margin, in pod-force units, is the hysteresis for switching range ends
-	// when the target falls outside the tilt range.
-	static constexpr float kTiltRearCone = 0.05f;
+protected:
+	void updateParams() override;
 
 private:
-	/** +1, -1 or 0: the direction of a shortfall, as the rate controller reads it */
-	static float saturationSign(float shortfall);
-	static float discountHeld(float residual, float held_part);
+	/** Refresh the armed state from vehicle_status */
+	bool isArmed();
+
+	/** Write the tilt servos and read the clamped angles back; the collective servo drives both pods */
+	void writeTiltServos(ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
+			     const ActuatorVector &actuator_max);
 
 	/**
-	 * Tilt a pod should steer to for a force demand above the steer band
-	 * @param fx, fz pod force demand (forward, up), magnitude its norm
-	 * @param committed the pod's current tilt target [rad]
-	 * @return the target within [tilt_min, tilt_max] [rad]
+	 * Remove from a shortfall the share a pod withheld by the steer band's
+	 * choice: reported as saturation it would freeze the rate integrator
+	 * against the small steady torques the integral exists to remove. Only
+	 * a same-signed share is removed; a swinging, clamped or fixed tilt
+	 * keeps reporting.
 	 */
-	static float steerTarget(float fx, float fz, float magnitude, float committed, float tilt_min, float tilt_max);
+	static float discountHeld(float shortfall, float held);
 
-	/** Write the realized tilts to the servo outputs and read the clamped angles back */
-	void writeTiltServos(ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
-			     const ActuatorVector &actuator_max, float tilt_min, float tilt_span);
+	/** +1, -1 or 0: the direction of a shortfall, as the rate controller reads it */
+	static float saturationSign(float shortfall);
 
-	float tiltMin() const { return math::radians(_param_ca_airship_tlmin.get()); }
-	float tiltMax() const { return math::radians(_param_ca_airship_tlmax.get()); }
-
-	SlewRate<float> _tilt[2] {};	///< realized tilt [rad], held through zero-thrust
-	float _tilt_target[2] {};	///< commanded tilt [rad] the slew tracks; holds through the hysteresis band
-	bool _tilt_steering[2] {};	///< per-pod hysteresis state of the direction hold
-
-	bool _armed{false};		///< the tilts park until vehicle_status reports armed, as the tiltrotor holds its tilts
-	float _dt{0.f};		///< allocator time step [s], handed in right before updateSetpoint()
+	AirshipPod _pods[NUM_PODS] {};
+	bool _armed{false};		///< the tilts park until vehicle_status reports armed
+	float _dt{0.f};			///< allocator time step [s], handed in right before updateSetpoint()
 
 	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
 
 	ActuatorEffectivenessControlSurfaces _control_surfaces;
 
+	// From the parameters
+	Grouping _grouping{Grouping::Collective};
+	bool _has_tail{false};
+
 	// Actuator layout, decided when the actuators are declared
 	int _first_control_surface_idx{0};
 	int _first_tilt_idx{0};
-	int _tilt_count{0};
-	bool _has_tail{false};
-	bool _independent{false};
-
+	int _num_tilt_servos{0};
 	bool _surface_serves[3] {};	///< torque axes with control-surface effectiveness
+
 	matrix::Vector3f _surface_torque{};	///< torque the clipped, trim-relative surface deflections can deliver
-	matrix::Vector3f _achieved_torque{};	///< torque the pods and tail delivered (no pitch: the pods produce none)
+	matrix::Vector3f _achieved_torque{};	///< torque the pods and tail delivered
 	matrix::Vector3f _held_torque{};	///< torque a pod held inside the steer band leaves unserved by choice
 	float _unallocated_torque[3] {};	///< sign of the roll/pitch/yaw shortfall left by the propulsors
 	float _unallocated_thrust[3] {};	///< sign of the x/y/z force shortfall left by the propulsors

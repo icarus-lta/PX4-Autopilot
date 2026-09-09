@@ -3,6 +3,8 @@ px4_add_library(VehicleActuatorEffectiveness
 	ActuatorEffectivenessUUV.hpp
 	ActuatorEffectivenessAirship.cpp
 	ActuatorEffectivenessAirship.hpp
+	AirshipPod.cpp
+	AirshipPod.hpp
 	ActuatorEffectivenessControlSurfaces.cpp
 	ActuatorEffectivenessControlSurfaces.hpp
 	ActuatorEffectivenessCustom.cpp
@@ -42,6 +44,7 @@ target_link_libraries(VehicleActuatorEffectiveness
 		PID
 )
 
+px4_add_unit_gtest(SRC AirshipPodTest.cpp EXTRA_SRCS AirshipPod.cpp LINKLIBS mathlib)
 px4_add_functional_gtest(SRC ActuatorEffectivenessAirshipTest.cpp LINKLIBS VehicleActuatorEffectiveness)
 px4_add_functional_gtest(SRC ActuatorEffectivenessHelicopterTest.cpp LINKLIBS VehicleActuatorEffectiveness)
 px4_add_functional_gtest(SRC ActuatorEffectivenessRotorsTest.cpp LINKLIBS VehicleActuatorEffectiveness)
