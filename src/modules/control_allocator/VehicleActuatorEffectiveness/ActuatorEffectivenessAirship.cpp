@@ -33,8 +33,6 @@
 
 #include "ActuatorEffectivenessAirship.hpp"
 
-#include <lib/mathlib/mathlib.h>
-
 #include <float.h>
 
 using namespace matrix;
@@ -67,8 +65,7 @@ ActuatorEffectivenessAirship::getEffectivenessMatrix(Configuration &configuratio
 
 	_independent = _param_ca_airship_grp.get() > 0;
 	_first_tilt_idx = configuration.num_actuators_matrix[0];
-	const bool has_tilt_range = math::radians(_param_ca_airship_tlmax.get() - _param_ca_airship_tlmin.get()) >
-				    kMinTiltSpan;
+	const bool has_tilt_range = tiltMax() - tiltMin() > kMinTiltSpan;
 	_tilt_count = has_tilt_range ? (_independent ? 2 : 1) : 0;
 
 	for (int i = 0; i < _tilt_count; i++) {
@@ -107,7 +104,7 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	// serve the demand they leave unmet. The surface torque is credited
 	// only by CA_AIRSHIP_CS_K: still-air surfaces deliver none of their
 	// allocation, so at low credit the propulsors serve it instead.
-	Vector3f surface_torque{};
+	_surface_torque.setZero();
 
 	for (int i = 0; i < _control_surfaces.count(); i++) {
 		const int idx = _first_control_surface_idx + i;
@@ -120,19 +117,16 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		// and stays invisible to the credit.
 		const float deflection = math::constrain(actuator_sp(idx), actuator_min(idx), actuator_max(idx))
 					 - _control_surfaces.config(i).trim;
-		surface_torque += _control_surfaces.config(i).torque * deflection;
+		_surface_torque += _control_surfaces.config(i).torque * deflection;
 	}
-
-	_surface_torque = surface_torque;
 
 	const float credit = _param_ca_airship_cs_k.get();
 
-	const float yaw = control_sp(ControlAxis::YAW) - credit * surface_torque(2);
-	const float roll = control_sp(ControlAxis::ROLL) - credit * surface_torque(0);
+	const float yaw = control_sp(ControlAxis::YAW) - credit * _surface_torque(2);
+	const float roll = control_sp(ControlAxis::ROLL) - credit * _surface_torque(0);
 
-	const float tilt_min = math::radians(_param_ca_airship_tlmin.get());
-	const float tilt_max = math::radians(_param_ca_airship_tlmax.get());
-	const float tilt_span = tilt_max - tilt_min;
+	const float tilt_min = tiltMin();
+	const float tilt_max = tiltMax();
 
 	// Per-pod force decomposition (0 = starboard, 1 = port)
 	float fx[2] = {thrust_forward - yaw, thrust_forward + yaw};
@@ -149,9 +143,11 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		_armed = armed.armed;
 	}
 
-	// The dt floor matches the allocator's scheduling clamp so fast gyro
-	// rates do not inflate the slew step; the larger ceiling only bounds
-	// the first step after a scheduling gap
+	// Clamp dt like the allocator's own scheduling guard (same 0.2 ms floor
+	// as ControlAllocator::Run: it only bites above 5 kHz, and keeps a
+	// zero-length interval from stalling the slew); the 100 ms ceiling,
+	// looser than the allocator's 20 ms, only bounds the first step after
+	// a scheduling gap
 	const hrt_abstime now = hrt_absolute_time();
 	const float dt = math::constrain((now - _last_update_time) * 1e-6f, 2e-4f, 0.1f);
 	_last_update_time = now;
@@ -166,6 +162,10 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 
 		const float magnitude = sqrtf(fx[i] * fx[i] + fz[i] * fz[i]);
 
+		// Engaged steering stands until the demand drops below the release
+		// threshold; between release and engage the target holds unchanged
+		const bool steering_holds = _tilt_steering[i] && magnitude > kTiltSteerRelease;
+
 		if (!_armed) {
 			// Disarmed, park the tilt as close to level as the range allows
 			_tilt_steering[i] = false;
@@ -174,54 +174,11 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		} else if (magnitude > kTiltSteerEngage) {
 			_tilt_steering[i] = true;
 			retargeted[i] = true;
-			float tilt = atan2f(fz[i], fx[i]);
+			_tilt_target[i] = steerTarget(fx[i], fz[i], magnitude, _tilt_target[i], tilt_min, tilt_max);
 
-			// Reaching the opposite range end costs a full sweep of an
-			// end-stop servo, so end selection is sticky: noise-sized
-			// advantages must not retarget across the range.
-			const float commit_margin = fmaxf(kTiltRearCone * magnitude, kTiltSteerRelease);
-
-			// A (near-)straight-back demand is realizable at either end
-			// of the range: pick the end that realizes it best, and on a
-			// tie keep the end already committed to, so noise on the
-			// perpendicular axis cannot flip the target across the
-			// range. The margin floor covers stick noise at low demand.
-			if (fx[i] < 0.f && fabsf(fz[i]) < commit_margin) {
-				const float rear_hi = math::constrain(M_PI_F, tilt_min, tilt_max);
-				const float rear_lo = math::constrain(-M_PI_F, tilt_min, tilt_max);
-
-				if (fabsf(cosf(rear_hi) - cosf(rear_lo)) > FLT_EPSILON) {
-					tilt = cosf(rear_hi) < cosf(rear_lo) ? rear_hi : rear_lo;
-
-				} else {
-					tilt = _tilt_target[i] >= 0.f ? rear_hi : rear_lo;
-				}
-
-			} else if (tilt < tilt_min || tilt > tilt_max) {
-				// The tilt is circular but the range is a segment: for a
-				// target outside it, the numerically nearer bound can
-				// point away from the demand entirely (e.g. range
-				// -180..0, demand back and slightly up). Choose the end
-				// that realizes more of the demand, floored at zero
-				// since the motors cannot reverse, and switch ends only
-				// past the commitment margin.
-				const float p_hi = fmaxf(0.f, fx[i] * cosf(tilt_max) + fz[i] * sinf(tilt_max));
-				const float p_lo = fmaxf(0.f, fx[i] * cosf(tilt_min) + fz[i] * sinf(tilt_min));
-				const bool committed_hi = _tilt_target[i] - tilt_min > tilt_max - _tilt_target[i];
-
-				if (committed_hi) {
-					tilt = p_lo > p_hi + commit_margin ? tilt_min : tilt_max;
-
-				} else {
-					tilt = p_hi > p_lo + commit_margin ? tilt_max : tilt_min;
-				}
-			}
-
-			_tilt_target[i] = math::constrain(tilt, tilt_min, tilt_max);
-
-		} else if (!(_tilt_steering[i] && magnitude > kTiltSteerRelease)) {
-			// Released below the band: hold the tilt where it is. Inside
-			// the band the engaged target stands unchanged.
+		} else if (!steering_holds) {
+			// Released: hold the tilt where it is (inside the band the
+			// engaged target stands)
 			_tilt_steering[i] = false;
 			_tilt_target[i] = _tilt[i].getState();
 		}
@@ -236,74 +193,57 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		}
 	}
 
-	// Write the tilt servos before projecting: the projection must use
-	// the angle the servo output can actually realize. Realized means
-	// after the min/max clamp - the generic CA_SVn_SLEW runs later and
-	// is invisible to this model, so tilt slewing belongs in
-	// CA_AIRSHIP_TLT_R.
-	if (_tilt_count > 0 && tilt_span > kMinTiltSpan) {
-		for (int i = 0; i < _tilt_count; i++) {
-			const int idx = _first_tilt_idx + i;
-			const float tilt_sp = -1.f + 2.f * (_tilt[i].getState() - tilt_min) / tilt_span;
-			actuator_sp(idx) = math::constrain(tilt_sp, actuator_min(idx), actuator_max(idx));
-			_tilt[i].setForcedValue(tilt_min + (actuator_sp(idx) + 1.f) * 0.5f * tilt_span);
-		}
+	writeTiltServos(actuator_sp, actuator_min, actuator_max, tilt_min, tilt_max - tilt_min);
 
-		if (!_independent) {
-			// The single collective servo drives both pods
-			_tilt[1].setForcedValue(_tilt[0].getState());
-		}
-	}
-
-	float thrust[2];
-	float cos_tilt[2];
-	float sin_tilt[2];
+	float thrust[2];	// unclamped projection, read again by the held-share discount
+	float achieved_x[2] {};
+	float achieved_z[2] {};
 
 	for (int i = 0; i < 2; i++) {
-		cos_tilt[i] = cosf(_tilt[i].getState());
-		sin_tilt[i] = sinf(_tilt[i].getState());
+		const float cos_tilt = cosf(_tilt[i].getState());
+		const float sin_tilt = sinf(_tilt[i].getState());
 
 		// Project the demand onto the realized tilt: the feasible
 		// component when the tilt is clamped, fixed or still slewing.
-		thrust[i] = fx[i] * cos_tilt[i] + fz[i] * sin_tilt[i];
-	}
+		thrust[i] = fx[i] * cos_tilt + fz[i] * sin_tilt;
 
-	for (int i = 0; i < 2; i++) {
 		// The propellers are non-reversible: reverse thrust is reached by
 		// tilting, never by a negative motor command (the CA_R_REV pod
 		// bits are deliberately not honored here).
 		actuator_sp(i) = math::constrain(thrust[i], math::max(actuator_min(i), 0.f), actuator_max(i));
+
+		// The achieved wrench, for the demand left unmet on each axis
+		achieved_x[i] = actuator_sp(i) * cos_tilt;
+		achieved_z[i] = actuator_sp(i) * sin_tilt;
 	}
 
-	// Report the demand left unmet on each axis by the achieved wrench.
-	const float achieved_x[2] = {actuator_sp(0) *cos_tilt[0], actuator_sp(1) *cos_tilt[1]};
-	const float achieved_z[2] = {actuator_sp(0) *sin_tilt[0], actuator_sp(1) *sin_tilt[1]};
-	float achieved_yaw = 0.5f * (achieved_x[1] - achieved_x[0]);
+	_achieved_yaw = 0.5f * (achieved_x[1] - achieved_x[0]);
 
 	if (_has_tail) {
 		// The tail thruster serves the yaw demand the pods leave unmet;
 		// reverse authority comes from the motor configuration.
-		actuator_sp(2) = math::constrain(yaw - achieved_yaw, actuator_min(2), actuator_max(2));
-		achieved_yaw += actuator_sp(2);
+		actuator_sp(2) = math::constrain(yaw - _achieved_yaw, actuator_min(2), actuator_max(2));
+		_achieved_yaw += actuator_sp(2);
 	}
 
 	_achieved_roll = 0.5f * (achieved_z[1] - achieved_z[0]);
-	_achieved_yaw = achieved_yaw;
 
 	// A pod inside the steer band holds its direction on purpose (see
 	// kTiltSteerEngage); what it projects away is the band's choice, not
 	// missing authority, and reported as saturation it would freeze the rate
 	// controller's integrator against the small steady torques the integral
 	// exists to remove. Discount that part from the reported shortfall: a
-	// swinging pod, a fixed mount or a clamped actuator remain real.
+	// swinging pod, a fixed mount or a tilt servo clamped short of its
+	// target remain real (the servo write-back above keeps a clamped tilt
+	// off its target). A held pod's demand sits inside the band, far below
+	// the motor limit, so no motor-clamp check is needed.
 	constexpr float kTiltSettled = 1e-3f; // rad
 	float held_x[2] {};	// demand a held pod leaves unserved by choice
 	float held_z[2] {};
 
 	for (int i = 0; i < 2; i++) {
 		const bool held = _tilt_count > 0 && _armed && !retargeted[i]
-				  && fabsf(_tilt[i].getState() - _tilt_target[i]) < kTiltSettled
-				  && thrust[i] <= actuator_max(i);
+				  && fabsf(_tilt[i].getState() - _tilt_target[i]) < kTiltSettled;
 
 		if (held) {
 			held_x[i] = fx[i] - achieved_x[i];
@@ -311,25 +251,107 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		}
 	}
 
-	setSaturationFlag(discountHeld(thrust_forward - 0.5f * (achieved_x[0] + achieved_x[1]),
-				       0.5f * (held_x[0] + held_x[1])),
+	// Mean pod force, in the same normalized units as the thrust demand
+	const float achieved_forward = 0.5f * (achieved_x[0] + achieved_x[1]);
+	const float achieved_up = 0.5f * (achieved_z[0] + achieved_z[1]);
+	const float held_forward = 0.5f * (held_x[0] + held_x[1]);
+	const float held_up = 0.5f * (held_z[0] + held_z[1]);
+
+	setSaturationFlag(discountHeld(thrust_forward - achieved_forward, held_forward),
 			  _saturation_flags.thrust_x_pos, _saturation_flags.thrust_x_neg);
 	// No actuator produces lateral force: the demand is unserved as-is
 	setSaturationFlag(control_sp(ControlAxis::THRUST_Y),
 			  _saturation_flags.thrust_y_pos, _saturation_flags.thrust_y_neg);
-	setSaturationFlag(discountHeld(-(thrust_up - 0.5f * (achieved_z[0] + achieved_z[1])),
-				       -0.5f * (held_z[0] + held_z[1])),
+	// The pods work in up-positive terms; the Z control axis points down
+	setSaturationFlag(-discountHeld(thrust_up - achieved_up, held_up),
 			  _saturation_flags.thrust_z_pos, _saturation_flags.thrust_z_neg);
 	// Collective pods project the same demand, so their held parts cancel
 	// and the structural yaw/roll shortfall stands
 	_held_yaw = 0.5f * (held_x[1] - held_x[0]);
 	_held_roll = 0.5f * (held_z[1] - held_z[0]);
-	setSaturationFlag(discountHeld(yaw - achieved_yaw, _held_yaw),
+	setSaturationFlag(discountHeld(yaw - _achieved_yaw, _held_yaw),
 			  _saturation_flags.yaw_pos, _saturation_flags.yaw_neg);
 	setSaturationFlag(discountHeld(roll - _achieved_roll, _held_roll),
 			  _saturation_flags.roll_pos, _saturation_flags.roll_neg);
 	// The pods produce no pitch torque
 	setSaturationFlag(control_sp(ControlAxis::PITCH), _saturation_flags.pitch_pos, _saturation_flags.pitch_neg);
+}
+
+float
+ActuatorEffectivenessAirship::steerTarget(const float fx, const float fz, const float magnitude,
+		const float committed, const float tilt_min, const float tilt_max)
+{
+	float tilt = atan2f(fz, fx);
+
+	// Reaching the opposite range end costs a full sweep of an end-stop
+	// servo, so both end selections below ignore advantages smaller than
+	// this margin; the floor covers stick noise at low demand.
+	const float commit_margin = fmaxf(kTiltRearCone * magnitude, kTiltSteerRelease);
+
+	if (fx < 0.f && fabsf(fz) < commit_margin) {
+		// Straight back, atan2 flips between +-180 deg on the sign of the
+		// perpendicular component: pick the range end that realizes the
+		// demand best, on a tie keep the committed end.
+		const float rear_hi = math::constrain(M_PI_F, tilt_min, tilt_max);
+		const float rear_lo = math::constrain(-M_PI_F, tilt_min, tilt_max);
+		const float cos_hi = cosf(rear_hi);
+		const float cos_lo = cosf(rear_lo);
+
+		if (fabsf(cos_hi - cos_lo) > FLT_EPSILON) {
+			tilt = cos_hi < cos_lo ? rear_hi : rear_lo;
+
+		} else {
+			tilt = committed >= 0.f ? rear_hi : rear_lo;
+		}
+
+	} else if (tilt < tilt_min || tilt > tilt_max) {
+		// The tilt is circular but the range is a segment: for a target
+		// outside it, the numerically nearer bound can point away from
+		// the demand entirely (e.g. range -180..0, demand back and
+		// slightly up). Choose the end that realizes more of the demand,
+		// floored at zero since the motors cannot reverse, and switch
+		// ends only past the commitment margin.
+		const float p_hi = fmaxf(0.f, fx * cosf(tilt_max) + fz * sinf(tilt_max));
+		const float p_lo = fmaxf(0.f, fx * cosf(tilt_min) + fz * sinf(tilt_min));
+		const bool committed_hi = committed - tilt_min > tilt_max - committed;
+
+		if (committed_hi) {
+			tilt = p_lo > p_hi + commit_margin ? tilt_min : tilt_max;
+
+		} else {
+			tilt = p_hi > p_lo + commit_margin ? tilt_max : tilt_min;
+		}
+	}
+
+	return math::constrain(tilt, tilt_min, tilt_max);
+}
+
+void
+ActuatorEffectivenessAirship::writeTiltServos(ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
+		const ActuatorVector &actuator_max, const float tilt_min, const float tilt_span)
+{
+	// Write the tilt servos before projecting: the projection must use
+	// the angle the servo output can actually realize. Realized means
+	// after the min/max clamp - the generic CA_SVn_SLEW runs later and
+	// is invisible to this model, so tilt slewing belongs in
+	// CA_AIRSHIP_TLT_R. The declaration allocates tilt servos only for a
+	// span above kMinTiltSpan; the span check also covers a parameter
+	// change that has not been redeclared yet.
+	if (_tilt_count == 0 || tilt_span <= kMinTiltSpan) {
+		return;
+	}
+
+	for (int i = 0; i < _tilt_count; i++) {
+		const int idx = _first_tilt_idx + i;
+		const float tilt_sp = -1.f + 2.f * (_tilt[i].getState() - tilt_min) / tilt_span;
+		actuator_sp(idx) = math::constrain(tilt_sp, actuator_min(idx), actuator_max(idx));
+		_tilt[i].setForcedValue(tilt_min + (actuator_sp(idx) + 1.f) * 0.5f * tilt_span);
+	}
+
+	if (!_independent) {
+		// The single collective servo drives both pods
+		_tilt[1].setForcedValue(_tilt[0].getState());
+	}
 }
 
 float
@@ -382,7 +404,9 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 	}
 
 	if (_surface_serves[1]) {
-		// The pods produce no pitch torque: the credited residual stands
+		// The pods and tail produce no pitch torque: only the uncredited
+		// surface share corrects the matrix residual, with nothing achieved
+		// or held to subtract
 		status.unallocated_torque[1] += uncredited * _surface_torque(1);
 
 	} else if (_saturation_flags.pitch_pos) {
