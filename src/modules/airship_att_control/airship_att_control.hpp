@@ -33,6 +33,7 @@
 
 #pragma once
 
+#include "airship_manual_input.hpp"
 #include "airship_yaw_rate.hpp"
 
 #include <lib/mathlib/mathlib.h>
@@ -92,18 +93,17 @@ private:
 	/** Push the gains into the rate controller and convert the max rate to rad/s */
 	void parameters_updated();
 
-	/** Manual thrust: throttle forward, pitch vertical; zero unless armed with usable sticks */
-	void publishThrustSetpoint(const hrt_abstime &timestamp_sample);
+	void publishThrustSetpoint(const matrix::Vector3f &thrust, const hrt_abstime &timestamp_sample);
+	void publishTorqueSetpoint(const matrix::Vector3f &torque, const hrt_abstime &timestamp_sample);
 
-	/** Stick torque passthrough, with the yaw axis closed on the stick rate where the mode asks for rates */
-	void publishTorqueSetpoint(const vehicle_angular_velocity_s &angular_velocity, float dt, bool new_sticks);
+	/** The yaw rate the stick commands, with the thrust it is flown at, for logging and telemetry */
+	void publishRatesSetpoint(float yaw_rate_sp, const matrix::Vector3f &thrust);
 
 	/**
 	 * Close the yaw rate loop on the stick.
-	 * @param publish_setpoint publish the rates setpoint (on a new stick sample)
 	 * @return normalized yaw torque
 	 */
-	float controlYawRate(const vehicle_angular_velocity_s &angular_velocity, float dt, bool publish_setpoint);
+	float controlYawRate(const matrix::Vector3f &rates, float yaw_rate_sp, float dt);
 
 	/** Anti-windup feedback from the control allocator */
 	void updateSaturationStatus();
@@ -134,7 +134,6 @@ private:
 	manual_control_setpoint_s       _manual_control_setpoint{};
 	vehicle_control_mode_s          _vehicle_control_mode{};
 
-	matrix::Vector3f _thrust_setpoint{};	///< last published thrust, mirrored into the rates setpoint
 	hrt_abstime _last_run{0};
 	float _yaw_rate_max{0.f};		///< AS_YAWRATE_MAX [rad/s]
 	bool _yaw_loop_active{false};		///< the yaw rate loop closed on the previous cycle

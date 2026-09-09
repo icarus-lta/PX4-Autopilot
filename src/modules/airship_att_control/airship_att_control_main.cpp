@@ -45,12 +45,6 @@
 
 using namespace matrix;
 
-// NaN marks a manual channel without valid data: read it as released
-static float finiteOr(float value, float fallback)
-{
-	return PX4_ISFINITE(value) ? value : fallback;
-}
-
 ModuleBase::Descriptor AirshipAttitudeControl::desc{task_spawn, custom_command, print_usage};
 
 AirshipAttitudeControl::AirshipAttitudeControl() :
@@ -105,85 +99,44 @@ AirshipAttitudeControl::parameters_updated()
 	_yaw_rate_max = math::radians(_param_as_yawrate_max.get());
 }
 
-void AirshipAttitudeControl::publishThrustSetpoint(const hrt_abstime &timestamp_sample)
+void AirshipAttitudeControl::publishThrustSetpoint(const Vector3f &thrust, const hrt_abstime &timestamp_sample)
 {
-	vehicle_thrust_setpoint_s v_thrust_sp = {};
+	vehicle_thrust_setpoint_s v_thrust_sp{};
 	v_thrust_sp.timestamp = hrt_absolute_time();
 	v_thrust_sp.timestamp_sample = timestamp_sample;
-
-	// zero actuators unless armed with usable manual input
-	if (manualInputUsable()) {
-		v_thrust_sp.xyz[0] = (finiteOr(_manual_control_setpoint.throttle, -1.f) + 1.f) * .5f;
-		// Stick forward descends: pitch drives the elevators on finned
-		// airships and vertical thrust on vectored ones.
-		v_thrust_sp.xyz[2] = finiteOr(_manual_control_setpoint.pitch, 0.f);
-	}
-
-	_thrust_setpoint = Vector3f(v_thrust_sp.xyz);
+	thrust.copyTo(v_thrust_sp.xyz);
 	_vehicle_thrust_setpoint_pub.publish(v_thrust_sp);
 }
 
-void AirshipAttitudeControl::publishTorqueSetpoint(const vehicle_angular_velocity_s &angular_velocity, const float dt,
-		const bool new_sticks)
+void AirshipAttitudeControl::publishTorqueSetpoint(const Vector3f &torque, const hrt_abstime &timestamp_sample)
 {
-	vehicle_torque_setpoint_s v_torque_sp = {};
+	vehicle_torque_setpoint_s v_torque_sp{};
 	v_torque_sp.timestamp = hrt_absolute_time();
-	v_torque_sp.timestamp_sample = angular_velocity.timestamp_sample;
-
-	const bool manual_input_usable = manualInputUsable();
-	const bool yaw_loop_active = airship_yaw_rate::loopActive(_vehicle_control_mode, manual_input_usable);
-
-	// zero actuators unless armed with usable manual input
-	if (manual_input_usable) {
-		v_torque_sp.xyz[0] = finiteOr(_manual_control_setpoint.roll, 0.f);
-		// Stick forward is nose down: negative pitch rotation in FRD
-		v_torque_sp.xyz[1] = -finiteOr(_manual_control_setpoint.pitch, 0.f);
-		// Yaw: rate loop where the mode asks for rates, otherwise the stick is the torque
-		v_torque_sp.xyz[2] = yaw_loop_active ? controlYawRate(angular_velocity, dt, new_sticks)
-				     : finiteOr(_manual_control_setpoint.yaw, 0.f);
-	}
-
-	if (!yaw_loop_active) {
-		_rate_control.resetIntegral();
-
-		if (_yaw_loop_active) {
-			// log the reset once, so the integrator does not read as frozen
-			publishRateControlStatus();
-		}
-	}
-
-	_yaw_loop_active = yaw_loop_active;
-
+	v_torque_sp.timestamp_sample = timestamp_sample;
+	torque.copyTo(v_torque_sp.xyz);
 	_vehicle_torque_setpoint_pub.publish(v_torque_sp);
 }
 
-float AirshipAttitudeControl::controlYawRate(const vehicle_angular_velocity_s &angular_velocity, const float dt,
-		const bool publish_setpoint)
+void AirshipAttitudeControl::publishRatesSetpoint(const float yaw_rate_sp, const Vector3f &thrust)
 {
-	updateSaturationStatus();
+	// Roll and pitch carry no rate loop: NaN marks them uncontrolled
+	vehicle_rates_setpoint_s rates_sp{};
+	rates_sp.roll = NAN;
+	rates_sp.pitch = NAN;
+	rates_sp.yaw = yaw_rate_sp;
+	thrust.copyTo(rates_sp.thrust_body);
+	rates_sp.timestamp = hrt_absolute_time();
+	_vehicle_rates_setpoint_pub.publish(rates_sp);
+}
 
-	const float yaw_rate_sp = airship_yaw_rate::setpointFromStick(_manual_control_setpoint.yaw,
-				  _param_man_deadzone.get(), _yaw_rate_max);
-
-	const Vector3f rates{angular_velocity.xyz};
-
+float AirshipAttitudeControl::controlYawRate(const Vector3f &rates, const float yaw_rate_sp, const float dt)
+{
 	// No D term, so no angular acceleration (0 * NaN would poison the torque).
-	// landed = false: AirshipLandDetector reports landed = !armed and landed
-	// throughout AUTO_LAND, which would freeze the integrator in flight.
+	// landed = false: AirshipLandDetector reports landed only when disarmed or
+	// in AUTO_LAND, and the loop is open in both (loopActive, reset in Run),
+	// so the flag would add nothing; windup while armed on the ground is not
+	// handled yet.
 	const Vector3f torque = _rate_control.update(rates, Vector3f(0.f, 0.f, yaw_rate_sp), Vector3f{}, dt, false);
-
-	if (publish_setpoint) {
-		// Roll and pitch carry no rate loop: NaN marks them uncontrolled
-		vehicle_rates_setpoint_s rates_sp{};
-		rates_sp.roll = NAN;
-		rates_sp.pitch = NAN;
-		rates_sp.yaw = yaw_rate_sp;
-		_thrust_setpoint.copyTo(rates_sp.thrust_body);
-		rates_sp.timestamp = hrt_absolute_time();
-		_vehicle_rates_setpoint_pub.publish(rates_sp);
-	}
-
-	publishRateControlStatus();
 
 	return PX4_ISFINITE(torque(2)) ? torque(2) : 0.f;
 }
@@ -247,8 +200,38 @@ AirshipAttitudeControl::Run()
 		const bool new_sticks = _manual_control_setpoint_sub.update(&_manual_control_setpoint);
 		_vehicle_control_mode_sub.update(&_vehicle_control_mode);
 
-		publishThrustSetpoint(angular_velocity.timestamp_sample);
-		publishTorqueSetpoint(angular_velocity, dt, new_sticks);
+		// zero actuators unless armed with usable manual input
+		const bool manual_input_usable = manualInputUsable();
+		const Vector3f thrust = manual_input_usable ? airship_manual_input::thrust(_manual_control_setpoint) : Vector3f{};
+		Vector3f torque = manual_input_usable ? airship_manual_input::torque(_manual_control_setpoint) : Vector3f{};
+
+		publishThrustSetpoint(thrust, angular_velocity.timestamp_sample);
+
+		// Yaw: rate loop where the mode asks for rates, otherwise the stick is the torque
+		const bool yaw_loop_active = airship_yaw_rate::loopActive(_vehicle_control_mode, manual_input_usable);
+
+		if (yaw_loop_active) {
+			updateSaturationStatus();
+			const float yaw_rate_sp = airship_yaw_rate::setpointFromStick(_manual_control_setpoint.yaw,
+						  _param_man_deadzone.get(), _yaw_rate_max);
+			torque(2) = controlYawRate(Vector3f{angular_velocity.xyz}, yaw_rate_sp, dt);
+
+			if (new_sticks) {
+				publishRatesSetpoint(yaw_rate_sp, thrust);
+			}
+
+			publishRateControlStatus();
+
+		} else if (_yaw_loop_active) {
+			// The loop just opened: clear the integrator (it only changes while
+			// the loop is closed) and publish once so it does not read as frozen
+			_rate_control.resetIntegral();
+			publishRateControlStatus();
+		}
+
+		_yaw_loop_active = yaw_loop_active;
+
+		publishTorqueSetpoint(torque, angular_velocity.timestamp_sample);
 
 		parameter_update_poll();
 	}
@@ -305,8 +288,9 @@ int AirshipAttitudeControl::print_usage(const char *reason)
 This implements the airship attitude and rate controller. Roll, pitch and
 thrust are stick passthrough. In manual modes with rate control (Acro,
 Stabilized, Altitude, Position) the yaw stick commands a yaw rate closed by a
-PI loop whenever armed, on the ground included; in Manual and in modes without
-pilot input the yaw stick is passed through as torque.
+PI loop whenever armed, on the ground included; in Manual and in the non-manual
+modes (Hold, Mission, Land, Offboard: no other module drives the airship there)
+the yaw stick is passed through as torque.
 
 ### Implementation
 To reduce control latency, the module directly polls on the gyro topic published by the IMU driver.

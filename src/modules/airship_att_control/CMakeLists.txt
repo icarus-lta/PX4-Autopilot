@@ -38,6 +38,7 @@ px4_add_module(
 	COMPILE_FLAGS
 	SRCS
 		airship_att_control_main.cpp
+		airship_manual_input.hpp
 		airship_yaw_rate.hpp
 	MODULE_CONFIG
 		airship_att_control_params.yaml
@@ -47,4 +48,5 @@ px4_add_module(
 		RateControl
 	)
 
+px4_add_unit_gtest(SRC AirshipManualInputTest.cpp LINKLIBS modules__airship_att_control)
 px4_add_unit_gtest(SRC AirshipYawRateTest.cpp LINKLIBS modules__airship_att_control)
