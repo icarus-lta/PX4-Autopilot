@@ -91,10 +91,12 @@ inline float yawRateSetpoint(float stick, float deadzone, float max_rate)
 }
 
 /**
- * Whether the yaw rate loop closes on the stick: manual modes with rate
- * control (Acro, Stabilized, Altitude, Position). Manual has rates off and
- * the non-manual modes have no setpoint source here yet; both keep the
- * torque passthrough.
+ * Whether the yaw rate loop closes on the stick: usable manual input (armed
+ * with valid sticks, the caller's flag) in a manual mode with rate control
+ * (Acro, Stabilized, Altitude, Position). Manual has rates off and the
+ * non-manual modes have no setpoint source here yet; both keep the torque
+ * passthrough. Disarmed or with the sticks lost the loop stays open, so it
+ * cannot overwrite the zeroed torque or wind up.
  */
 inline bool yawRateLoopActive(const vehicle_control_mode_s &control_mode, bool manual_input_usable)
 {
