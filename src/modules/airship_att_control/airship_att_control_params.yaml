@@ -26,10 +26,10 @@ parameters:
     AS_YR_INT_LIM:
       description:
         short: Yaw rate integrator limit
-        long: Yaw rate integrator limit, in normalized yaw torque where 1.0 is the
-          full pod couple. Can be set to increase the amount of integrator available
-          to counteract disturbances such as wind, or reduced to improve settling
-          time after large yaw moment trim changes.
+        long: Yaw rate integrator limit, in normalized yaw torque, the unit of the
+          yaw torque setpoint the allocator serves. Can be set to increase the amount
+          of integrator available to counteract disturbances such as wind, or reduced
+          to improve settling time after large yaw moment trim changes.
       type: float
       default: 0.3
       min: 0.0
