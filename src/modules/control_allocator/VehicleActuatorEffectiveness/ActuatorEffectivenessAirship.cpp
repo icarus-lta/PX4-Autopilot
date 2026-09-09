@@ -124,7 +124,11 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	const float roll = control_sp(ControlAxis::ROLL) - credit * _surface_torque(0);
 
 	const float tilt_min = tiltMin();
-	const float tilt_max = tiltMax();
+	// An inverted range declares no tilt servo (see getEffectivenessMatrix):
+	// treat it as the empty range at CA_AIRSHIP_TLMIN so every constrain
+	// below sees ordered bounds instead of returning the opposite end each
+	// call, which would flip the held tilt between the two limits
+	const float tilt_max = fmaxf(tiltMax(), tilt_min);
 
 	// Per-pod force decomposition (0 = starboard, 1 = port)
 	float fx[2] = {thrust_forward - yaw, thrust_forward + yaw};
