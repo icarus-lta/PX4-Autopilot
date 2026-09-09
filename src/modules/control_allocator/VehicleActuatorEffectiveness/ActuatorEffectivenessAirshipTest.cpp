@@ -48,9 +48,11 @@ static constexpr int MOTOR_TAIL = 2;
 static constexpr int TAIL_TILT_STARBOARD = 3;
 static constexpr int TAIL_TILT_PORT = 4;
 
-// Surfaces declared by setSurfaces() follow the tilts
-static constexpr int SURFACE_ELEVATOR = 4;
-static constexpr int SURFACE_RUDDER = 5;
+// Surfaces follow the tilts (_first_control_surface_idx); setSurfaces()
+// declares an elevator then a rudder
+static constexpr int SURFACE_FIRST = 4;
+static constexpr int SURFACE_ELEVATOR = SURFACE_FIRST;
+static constexpr int SURFACE_RUDDER = SURFACE_FIRST + 1;
 
 // Collective grouping registers a single tilt servo
 static constexpr int COLLECTIVE_TILT = 2;
@@ -62,21 +64,15 @@ static void resetAirshipParams(float tilt_min_deg = -180.f, float tilt_max_deg =
 	// Disable autosaving parameters to avoid busy loop in param_set()
 	param_control_autosave(false);
 
+	// Start every test from the parameter defaults so nothing leaks between
+	// tests: independent grouping over the full tilt range, no tail, no
+	// surfaces, full surface credit, no tilt slew
+	param_reset_all();
+
 	int32_t grouping = 1;
 	param_set(param_find("CA_AIRSHIP_GRP"), &grouping);
-	int32_t tail = 0;
-	param_set(param_find("CA_AIRSHIP_TAIL"), &tail);
 	param_set(param_find("CA_AIRSHIP_TLMIN"), &tilt_min_deg);
 	param_set(param_find("CA_AIRSHIP_TLMAX"), &tilt_max_deg);
-	int32_t surface_count = 0;
-	param_set(param_find("CA_SV_CS_COUNT"), &surface_count);
-	float surface_trim = 0.f;
-	param_set(param_find("CA_SV_CS0_TRIM"), &surface_trim);
-	param_set(param_find("CA_SV_CS1_TRIM"), &surface_trim);
-	float surface_credit = 1.f;
-	param_set(param_find("CA_AIRSHIP_CS_K"), &surface_credit);
-	float tilt_rate = 0.f;
-	param_set(param_find("CA_AIRSHIP_TLT_R"), &tilt_rate);
 }
 
 static void setSurfaceCredit(float credit)
@@ -114,6 +110,26 @@ static void setSurfaces()
 	float yaw_torque = 1.f;
 	param_set(param_find("CA_SV_CS1_TRQ_Y"), &yaw_torque);
 }
+
+// Disarm for the scope of a test and restore the armed baseline on exit,
+// even on an early failure: the armed state is a persistent uORB sample,
+// not a parameter, so resetAirshipParams() does not cover it. The
+// publication must outlive the updates that read it: a subscriber only
+// copies from a topic that is currently advertised
+struct ScopedDisarm {
+	ScopedDisarm() { publish(false); }
+	~ScopedDisarm() { publish(true); }
+
+	void publish(bool armed)
+	{
+		actuator_armed_s msg{};
+		msg.timestamp = hrt_absolute_time();
+		msg.armed = armed;
+		_pub.publish(msg);
+	}
+
+	uORB::Publication<actuator_armed_s> _pub{ORB_ID(actuator_armed)};
+};
 
 // The actuator layout is decided when the actuators are declared, so every
 // updateSetpoint() needs a preceding declaration, as in the allocator
@@ -352,6 +368,14 @@ TEST(ActuatorEffectivenessAirshipTest, FixedMountRejectsVertical)
 	control_allocator_status_s status{};
 	airship.getUnallocatedControl(0, status);
 	EXPECT_FLOAT_EQ(status.unallocated_thrust[2], -1.f);
+
+	// The mirror: a downward demand is equally unreachable
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = 1.f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
+	airship.getUnallocatedControl(0, status);
+	EXPECT_FLOAT_EQ(status.unallocated_thrust[2], 1.f);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, FixedMountDifferentialYaw)
@@ -654,7 +678,7 @@ TEST(ActuatorEffectivenessAirshipTest, TailIdleWithIndependentCouple)
 	EXPECT_NEAR(actuator_sp(MOTOR_TAIL), 0.f, 1e-6f);
 }
 
-TEST(ActuatorEffectivenessAirshipTest, TailTopsUpClampedRange)
+TEST(ActuatorEffectivenessAirshipTest, TailTopsUpFixedMountYaw)
 {
 	resetAirshipParams(0.f, 0.f);
 	setTailThruster();
@@ -701,6 +725,21 @@ TEST(ActuatorEffectivenessAirshipTest, AsymmetricTiltRange)
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.5f);
 	EXPECT_FLOAT_EQ(actuator_sp(TAIL_COLLECTIVE_TILT), -1.f);
 
+	// Descent is unreachable: neither range end realizes a downward demand,
+	// so the tilt stays at the 0 deg floor, the motors project to zero and
+	// the shortfall is reported
+	control_sp.setZero();
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = 1.f;
+	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
+	EXPECT_FLOAT_EQ(actuator_sp(TAIL_COLLECTIVE_TILT), -1.f);
+	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 0.f, 1e-6f);
+	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.f, 1e-6f);
+
+	control_allocator_status_s status{};
+	airship.getUnallocatedControl(0, status);
+	EXPECT_FLOAT_EQ(status.unallocated_thrust[2], 1.f);
+	EXPECT_FLOAT_EQ(status.unallocated_thrust[0], 0.f);
+
 	// Climb: +90 deg is the range maximum, so the tilt servo sits at +1
 	control_sp.setZero();
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = -1.f;
@@ -718,7 +757,6 @@ TEST(ActuatorEffectivenessAirshipTest, AsymmetricTiltRange)
 	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.f, 1e-6f);
 	EXPECT_NEAR(actuator_sp(MOTOR_TAIL), 0.f, 1e-6f);
 
-	control_allocator_status_s status{};
 	airship.getUnallocatedControl(0, status);
 	EXPECT_FLOAT_EQ(status.unallocated_thrust[0], -1.f);
 	EXPECT_FLOAT_EQ(status.unallocated_torque[2], 0.f);
@@ -771,82 +809,43 @@ TEST(ActuatorEffectivenessAirshipTest, SurfacesKeepTheirSetpoints)
 	EXPECT_FLOAT_EQ(actuator_sp(SURFACE_ELEVATOR), 0.7f);
 }
 
-TEST(ActuatorEffectivenessAirshipTest, SurfacesServeFirst)
+TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditScalesPodShare)
 {
 	resetAirshipParams();
 	setSurfaces();
-	ActuatorEffectivenessAirship airship(nullptr);
 
-	// The rudder already carries 0.6 of the yaw demand from the matrix
-	// pass; the pods serve the remaining 0.4 and the report is exact
-	Vector<float, 6> control_sp{};
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
-	ActuatorEffectiveness::ActuatorVector actuator_sp{};
-	actuator_sp(SURFACE_RUDDER) = 0.6f;
-	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	// The rudder carries 0.6 of the yaw demand from the matrix pass but is
+	// credited only by CA_AIRSHIP_CS_K: the pods serve the rest, reversing
+	// the starboard pod, and the report is exact in every case
+	struct {
+		float credit;
+		float motor;
+	} cases[] = {{1.f, 0.4f}, {0.5f, 0.7f}, {0.f, 1.f}};
 
-	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.4f);
-	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.4f);
-	EXPECT_FLOAT_EQ(actuator_sp(SURFACE_RUDDER), 0.6f);
+	for (const auto &c : cases) {
+		SCOPED_TRACE(::testing::Message() << "credit=" << c.credit);
+		setSurfaceCredit(c.credit);
+		ActuatorEffectivenessAirship airship(nullptr);
 
-	control_allocator_status_s status{};
-	status.unallocated_torque[2] = 0.4f; // matrix residual: demand minus rudder
-	airship.getUnallocatedControl(0, status);
-	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
-}
+		Vector<float, 6> control_sp{};
+		control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
+		ActuatorEffectiveness::ActuatorVector actuator_sp{};
+		actuator_sp(SURFACE_RUDDER) = 0.6f;
+		runUpdateSetpoint(airship, control_sp, actuator_sp);
 
-TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditZeroPodsServeAll)
-{
-	resetAirshipParams();
-	setSurfaces();
-	setSurfaceCredit(0.f);
-	ActuatorEffectivenessAirship airship(nullptr);
+		EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), c.motor);
+		EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), c.motor);
+		EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f); // +180 deg
+		EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);      // forward
+		EXPECT_FLOAT_EQ(actuator_sp(SURFACE_RUDDER), 0.6f); // the matrix allocation stands
 
-	// The rudder still deflects with its matrix allocation, but with no
-	// credit the pods serve the whole demand: full yaw couple as in hover
-	Vector<float, 6> control_sp{};
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
-	ActuatorEffectiveness::ActuatorVector actuator_sp{};
-	actuator_sp(SURFACE_RUDDER) = 0.6f;
-	runUpdateSetpoint(airship, control_sp, actuator_sp);
-
-	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
-	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f); // +180 deg
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);      // forward
-	EXPECT_FLOAT_EQ(actuator_sp(SURFACE_RUDDER), 0.6f);
-
-	// The uncredited rudder share cancels against the solver residual:
-	// the pods served everything, so nothing is unallocated
-	control_allocator_status_s status{};
-	status.unallocated_torque[2] = 0.4f; // matrix residual: demand minus rudder
-	airship.getUnallocatedControl(0, status);
-	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
-}
-
-TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditSharesProportionally)
-{
-	resetAirshipParams();
-	setSurfaces();
-	setSurfaceCredit(0.5f);
-	ActuatorEffectivenessAirship airship(nullptr);
-
-	// Half credit: of the rudder's 0.6 allocation only 0.3 is trusted,
-	// so the pods serve the remaining 0.7 of the demand
-	Vector<float, 6> control_sp{};
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
-	ActuatorEffectiveness::ActuatorVector actuator_sp{};
-	actuator_sp(SURFACE_RUDDER) = 0.6f;
-	runUpdateSetpoint(airship, control_sp, actuator_sp);
-
-	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.7f);
-	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.7f);
-	EXPECT_FLOAT_EQ(actuator_sp(SURFACE_RUDDER), 0.6f);
-
-	control_allocator_status_s status{};
-	status.unallocated_torque[2] = 0.4f; // matrix residual: demand minus rudder
-	airship.getUnallocatedControl(0, status);
-	EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
+		// The uncredited rudder share cancels against the solver residual:
+		// the pods served everything, so nothing is unallocated
+		control_allocator_status_s status{};
+		status.unallocated_torque[2] = 0.4f; // matrix residual: demand minus rudder
+		airship.getUnallocatedControl(0, status);
+		EXPECT_NEAR(status.unallocated_torque[2], 0.f, 1e-6f);
+	}
 }
 
 TEST(ActuatorEffectivenessAirshipTest, RollSurfaceCreditedAgainstDifferentialRoll)
@@ -858,8 +857,6 @@ TEST(ActuatorEffectivenessAirshipTest, RollSurfaceCreditedAgainstDifferentialRol
 	param_set(param_find("CA_SV_CS0_TYPE"), &aileron);
 	float roll_torque = 1.f;
 	param_set(param_find("CA_SV_CS0_TRQ_R"), &roll_torque);
-	float no_pitch = 0.f; // persists at 1 from setSurfaces() in earlier tests
-	param_set(param_find("CA_SV_CS0_TRQ_P"), &no_pitch);
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	// The aileron carries 0.6 of the roll demand from the matrix pass;
@@ -868,7 +865,7 @@ TEST(ActuatorEffectivenessAirshipTest, RollSurfaceCreditedAgainstDifferentialRol
 	Vector<float, 6> control_sp{};
 	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 1.f;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
-	actuator_sp(SURFACE_ELEVATOR) = 0.6f; // first surface slot
+	actuator_sp(SURFACE_FIRST) = 0.6f;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.4f);
@@ -882,7 +879,71 @@ TEST(ActuatorEffectivenessAirshipTest, RollSurfaceCreditedAgainstDifferentialRol
 	EXPECT_NEAR(status.unallocated_torque[0], 0.f, 1e-6f);
 }
 
-TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditZeroReportsHoverPitch)
+TEST(ActuatorEffectivenessAirshipTest, RollSteerBandShortfallIsNotSaturation)
+{
+	resetAirshipParams();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// Level pods deliver none of a roll demand below the steer floor: the
+	// unmet demand is the band's own choice, not saturation
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.75f * ActuatorEffectivenessAirship::kTiltSteerEngage;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
+
+	control_allocator_status_s status{};
+	airship.getUnallocatedControl(0, status);
+	EXPECT_FLOAT_EQ(status.unallocated_torque[0], 0.f);
+
+	// Over the floor the pods vector straight down and up and serve it exactly
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 2.f * ActuatorEffectivenessAirship::kTiltSteerEngage;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), -0.5f); // -90 deg, down
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.5f);       // +90 deg, up
+	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 2.f * ActuatorEffectivenessAirship::kTiltSteerEngage, 1e-6f);
+	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 2.f * ActuatorEffectivenessAirship::kTiltSteerEngage, 1e-6f);
+	airship.getUnallocatedControl(0, status);
+	EXPECT_FLOAT_EQ(status.unallocated_torque[0], 0.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, RollSurfaceServedBandShortfallIsNotSaturation)
+{
+	resetAirshipParams();
+	int32_t surface_count = 1;
+	param_set(param_find("CA_SV_CS_COUNT"), &surface_count);
+	int32_t aileron = 1;
+	param_set(param_find("CA_SV_CS0_TYPE"), &aileron);
+	float roll_torque = 1.f;
+	param_set(param_find("CA_SV_CS0_TRQ_R"), &roll_torque);
+	setSurfaceCredit(0.5f);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// An aileron serves roll, so the report takes the surface branch. Half
+	// the aileron's allocation is credited, leaving half the demand for the
+	// pods, which is inside the steer band: they hold level and deliver none
+	Vector<float, 6> control_sp{};
+	const float demand = ActuatorEffectivenessAirship::kTiltSteerEngage;
+	control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = demand;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	actuator_sp(SURFACE_FIRST) = demand; // the matrix allocates the full demand to the unit aileron
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
+
+	// The held half is the band's choice on this path too
+	control_allocator_status_s status{};
+	status.unallocated_torque[0] = 0.f; // matrix residual: demand minus aileron
+	airship.getUnallocatedControl(0, status);
+	EXPECT_NEAR(status.unallocated_torque[0], 0.f, 1e-6f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditZeroReportsFullPitchDemand)
 {
 	resetAirshipParams();
 	setSurfaces();
@@ -997,7 +1058,7 @@ TEST(ActuatorEffectivenessAirshipTest, SaturatedSurfaceNotOverCredited)
 	EXPECT_FLOAT_EQ(actuator_sp(SURFACE_RUDDER), 1.5f); // clipping stays the allocator's job
 }
 
-TEST(ActuatorEffectivenessAirshipTest, NoiseBelowSteerThresholdHoldsTilt)
+TEST(ActuatorEffectivenessAirshipTest, DemandAtReleaseThresholdDoesNotHoldSteering)
 {
 	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
@@ -1010,12 +1071,14 @@ TEST(ActuatorEffectivenessAirshipTest, NoiseBelowSteerThresholdHoldsTilt)
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
 
-	// Stick noise below the steering threshold must not move the tilts,
-	// even though it exceeds the old near-zero hold bound
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.75f * ActuatorEffectivenessAirship::kTiltSteerRelease;
-	runUpdateSetpoint(airship, control_sp, actuator_sp);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
+	// A demand exactly at the release threshold releases (the hold is a
+	// strict comparison): the tilts stay where they are, in either sign
+	for (const float sign : {1.f, -1.f}) {
+		control_sp(ActuatorEffectiveness::ControlAxis::YAW) = sign * ActuatorEffectivenessAirship::kTiltSteerRelease;
+		runUpdateSetpoint(airship, control_sp, actuator_sp);
+		EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
+		EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
+	}
 }
 
 TEST(ActuatorEffectivenessAirshipTest, SteerHysteresisBand)
@@ -1150,8 +1213,10 @@ TEST(ActuatorEffectivenessAirshipTest, TiltServoLimitBoundsProjection)
 
 TEST(ActuatorEffectivenessAirshipTest, CloudshipMirrorSymmetricTilt)
 {
-	// Mirror of the Cloudship preset: collective mode, reversible tail
-	// thruster, symmetric tilt range -90..+90 deg (level = servo 0)
+	// Mirror of the Cloudship preset's tilt geometry: collective mode, tail
+	// thruster, symmetric tilt range -90..+90 deg (level = servo 0). The
+	// preset's reversible tail (CA_R_REV) is exercised by
+	// TailReverseNeedsConfiguration; no yaw is demanded here
 	resetAirshipParams(-90.f, 90.f);
 	setCollectiveMode();
 	setTailThruster();
@@ -1370,25 +1435,9 @@ TEST(ActuatorEffectivenessAirshipTest, DisarmParksTiltLevel)
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 
-	// Restore the armed baseline for later tests even on an early failure:
-	// the armed state is a persistent uORB sample, not a parameter
-	struct ArmedRestore {
-		uORB::Publication<actuator_armed_s> pub{ORB_ID(actuator_armed)};
-		~ArmedRestore()
-		{
-			actuator_armed_s armed{};
-			armed.timestamp = hrt_absolute_time();
-			armed.armed = true;
-			pub.publish(armed);
-		}
-	} armed_restore;
-
 	// Disarmed, the tilt parks level regardless of the demand and the
 	// reverse projection clamps the motor off
-	actuator_armed_s armed{};
-	armed.timestamp = hrt_absolute_time();
-	armed.armed = false;
-	armed_restore.pub.publish(armed);
+	ScopedDisarm disarmed;
 
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f); // parked at 0 deg, forward
@@ -1425,6 +1474,33 @@ TEST(ActuatorEffectivenessAirshipTest, SteerBandShortfallIsNotSaturation)
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 	airship.getUnallocatedControl(0, status);
 	EXPECT_FLOAT_EQ(status.unallocated_torque[2], 0.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, SteerBandVerticalShortfallIsNotSaturation)
+{
+	resetAirshipParams();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// Level pods with a vertical demand below the steer floor, in both
+	// directions: the pods hold level and deliver none of it, and the held
+	// share is the band's choice on the thrust axis as on the torque axes
+	for (const float sign : {-1.f, 1.f}) {
+		SCOPED_TRACE(::testing::Message() << "sign=" << sign);
+		Vector<float, 6> control_sp{};
+		control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = sign * 0.75f *
+				ActuatorEffectivenessAirship::kTiltSteerEngage;
+		ActuatorEffectiveness::ActuatorVector actuator_sp{};
+		runUpdateSetpoint(airship, control_sp, actuator_sp);
+		EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
+		EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
+		EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
+		EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
+
+		control_allocator_status_s status{};
+		airship.getUnallocatedControl(0, status);
+		EXPECT_FLOAT_EQ(status.unallocated_thrust[2], 0.f);
+		EXPECT_FLOAT_EQ(status.unallocated_torque[0], 0.f);
+	}
 }
 
 TEST(ActuatorEffectivenessAirshipTest, SwingShortfallIsSaturation)
@@ -1549,21 +1625,7 @@ TEST(ActuatorEffectivenessAirshipTest, DisarmedShortfallStillReported)
 	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
 
-	struct ArmedRestore {
-		uORB::Publication<actuator_armed_s> pub{ORB_ID(actuator_armed)};
-		~ArmedRestore()
-		{
-			actuator_armed_s armed{};
-			armed.timestamp = hrt_absolute_time();
-			armed.armed = true;
-			pub.publish(armed);
-		}
-	} armed_restore;
-
-	actuator_armed_s armed{};
-	armed.timestamp = hrt_absolute_time();
-	armed.armed = false;
-	armed_restore.pub.publish(armed);
+	ScopedDisarm disarmed;
 
 	// Parked tilts are not the steer band's choice: a disarmed demand the
 	// parked pods cannot realize is still reported honestly
@@ -1604,17 +1666,18 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceServedBandShortfallIsNotSaturation
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	// A rudder serves yaw, so the report takes the surface branch. Half the
-	// rudder's 0.02 allocation is credited, leaving 0.01 for the pods, which
-	// is inside the steer band: they hold level and the starboard motor
-	// clips, so only half of that arrives
+	// rudder's allocation is credited, leaving half the demand for the pods,
+	// which is inside the steer band: they hold level and the starboard
+	// motor clips, so only half of that arrives
 	Vector<float, 6> control_sp{};
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 0.02f;
+	const float demand = ActuatorEffectivenessAirship::kTiltSteerEngage;
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = demand;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
-	actuator_sp(SURFACE_RUDDER) = 0.02f;
+	actuator_sp(SURFACE_RUDDER) = demand; // the matrix allocates the full demand to the unit rudder
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
-	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.01f, 1e-6f);
+	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.5f * demand, 1e-6f);
 
 	// The held half is the band's choice on this path too
 	control_allocator_status_s status{};
