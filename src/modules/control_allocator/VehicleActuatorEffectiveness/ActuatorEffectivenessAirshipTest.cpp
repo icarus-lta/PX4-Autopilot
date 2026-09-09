@@ -430,6 +430,41 @@ TEST(ActuatorEffectivenessAirshipTest, FixedMountAtAngleServesVertical)
 	EXPECT_FLOAT_EQ(status.unallocated_thrust[0], 1.f);
 }
 
+TEST(ActuatorEffectivenessAirshipTest, InvertedRangeIsAFixedMountAtTheMinimum)
+{
+	// TLMIN > TLMAX is outside the declared parameter ranges, but nothing
+	// prevents it in storage: it declares no tilt servo, so the pods must
+	// sit still at TLMIN rather than flip between the two limits every
+	// update
+	resetAirshipParams(30.f, -30.f);
+	setTiltRate(90.f);
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	ActuatorEffectiveness::Configuration configuration{};
+	EXPECT_TRUE(airship.getEffectivenessMatrix(configuration, EffectivenessUpdateReason::MOTOR_ACTIVATION_UPDATE));
+	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::SERVOS], 0);
+
+	// A down demand has no component along the 30 deg mount: motors off,
+	// and identically so on the next update
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = 0.5f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+
+	for (int update = 0; update < 3; update++) {
+		SCOPED_TRACE(::testing::Message() << "update=" << update);
+		runUpdateSetpoint(airship, control_sp, actuator_sp);
+		EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
+		EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
+	}
+
+	// Forward demand projects onto the 30 deg mount
+	control_sp.setZero();
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = 0.5f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.5f * cosf(math::radians(30.f)));
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.5f * cosf(math::radians(30.f)));
+}
+
 TEST(ActuatorEffectivenessAirshipTest, CollectiveModeYawAndRollUnallocated)
 {
 	resetAirshipParams();
