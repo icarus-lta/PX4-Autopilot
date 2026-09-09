@@ -93,8 +93,6 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		int matrix_index, ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
 		const ActuatorVector &actuator_max)
 {
-	_saturation_flags = {};
-
 	// Normalized demands: forward/up thrust in units of the combined motor
 	// maximum, roll/yaw in units of the maximum couple.
 	const float thrust_forward = control_sp(ControlAxis::THRUST_X);
@@ -217,16 +215,17 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		achieved_z[i] = actuator_sp(i) * sin_tilt;
 	}
 
-	_achieved_yaw = 0.5f * (achieved_x[1] - achieved_x[0]);
+	float achieved_yaw = 0.5f * (achieved_x[1] - achieved_x[0]);
 
 	if (_has_tail) {
 		// The tail thruster serves the yaw demand the pods leave unmet;
 		// reverse authority comes from the motor configuration.
-		actuator_sp(2) = math::constrain(yaw - _achieved_yaw, actuator_min(2), actuator_max(2));
-		_achieved_yaw += actuator_sp(2);
+		actuator_sp(2) = math::constrain(yaw - achieved_yaw, actuator_min(2), actuator_max(2));
+		achieved_yaw += actuator_sp(2);
 	}
 
-	_achieved_roll = 0.5f * (achieved_z[1] - achieved_z[0]);
+	// The pods produce no pitch torque
+	_achieved_torque = Vector3f(0.5f * (achieved_z[1] - achieved_z[0]), 0.f, achieved_yaw);
 
 	// A pod inside the steer band holds its direction on purpose (see
 	// kTiltSteerEngage); what it projects away is the band's choice, not
@@ -257,24 +256,19 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	const float held_forward = 0.5f * (held_x[0] + held_x[1]);
 	const float held_up = 0.5f * (held_z[0] + held_z[1]);
 
-	setSaturationFlag(discountHeld(thrust_forward - achieved_forward, held_forward),
-			  _saturation_flags.thrust_x_pos, _saturation_flags.thrust_x_neg);
-	// No actuator produces lateral force: the demand is unserved as-is
-	setSaturationFlag(control_sp(ControlAxis::THRUST_Y),
-			  _saturation_flags.thrust_y_pos, _saturation_flags.thrust_y_neg);
-	// The pods work in up-positive terms; the Z control axis points down
-	setSaturationFlag(-discountHeld(thrust_up - achieved_up, held_up),
-			  _saturation_flags.thrust_z_pos, _saturation_flags.thrust_z_neg);
 	// Collective pods project the same demand, so their held parts cancel
 	// and the structural yaw/roll shortfall stands
-	_held_yaw = 0.5f * (held_x[1] - held_x[0]);
-	_held_roll = 0.5f * (held_z[1] - held_z[0]);
-	setSaturationFlag(discountHeld(yaw - _achieved_yaw, _held_yaw),
-			  _saturation_flags.yaw_pos, _saturation_flags.yaw_neg);
-	setSaturationFlag(discountHeld(roll - _achieved_roll, _held_roll),
-			  _saturation_flags.roll_pos, _saturation_flags.roll_neg);
+	_held_torque = Vector3f(0.5f * (held_z[1] - held_z[0]), 0.f, 0.5f * (held_x[1] - held_x[0]));
+
+	_unallocated_thrust[0] = saturationSign(discountHeld(thrust_forward - achieved_forward, held_forward));
+	// No actuator produces lateral force: the demand is unserved as-is
+	_unallocated_thrust[1] = saturationSign(control_sp(ControlAxis::THRUST_Y));
+	// The pods work in up-positive terms; the Z control axis points down
+	_unallocated_thrust[2] = saturationSign(-discountHeld(thrust_up - achieved_up, held_up));
+	_unallocated_torque[0] = saturationSign(discountHeld(roll - _achieved_torque(0), _held_torque(0)));
 	// The pods produce no pitch torque
-	setSaturationFlag(control_sp(ControlAxis::PITCH), _saturation_flags.pitch_pos, _saturation_flags.pitch_neg);
+	_unallocated_torque[1] = saturationSign(control_sp(ControlAxis::PITCH));
+	_unallocated_torque[2] = saturationSign(discountHeld(yaw - _achieved_torque(2), _held_torque(2)));
 }
 
 float
@@ -365,15 +359,18 @@ ActuatorEffectivenessAirship::discountHeld(float residual, float held_part)
 	return residual;
 }
 
-void
-ActuatorEffectivenessAirship::setSaturationFlag(float coeff, bool &positive_flag, bool &negative_flag)
+float
+ActuatorEffectivenessAirship::saturationSign(float shortfall)
 {
-	if (coeff > FLT_EPSILON) {
-		positive_flag = true;
-
-	} else if (coeff < -FLT_EPSILON) {
-		negative_flag = true;
+	if (shortfall > FLT_EPSILON) {
+		return 1.f;
 	}
+
+	if (shortfall < -FLT_EPSILON) {
+		return -1.f;
+	}
+
+	return 0.f;
 }
 
 void
@@ -387,81 +384,21 @@ ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_al
 	// residual, corrected for the uncredited share of the surface allocation
 	// and reduced by what the pods and tail achieved; the held share is
 	// discounted there too, so the band's choice never reads as saturation.
+	// Pitch has nothing achieved or held to subtract: the pods produce none.
 	const float uncredited = 1.f - _param_ca_airship_cs_k.get();
 
-	if (_surface_serves[0]) {
-		status.unallocated_torque[0] = discountHeld(status.unallocated_torque[0]
-					       + uncredited * _surface_torque(0) - _achieved_roll, _held_roll);
+	for (int axis = 0; axis < 3; axis++) {
+		if (_surface_serves[axis]) {
+			status.unallocated_torque[axis] = discountHeld(status.unallocated_torque[axis]
+							  + uncredited * _surface_torque(axis) - _achieved_torque(axis),
+							  _held_torque(axis));
 
-	} else if (_saturation_flags.roll_pos) {
-		status.unallocated_torque[0] = 1.f;
+		} else {
+			status.unallocated_torque[axis] = _unallocated_torque[axis];
+		}
 
-	} else if (_saturation_flags.roll_neg) {
-		status.unallocated_torque[0] = -1.f;
-
-	} else {
-		status.unallocated_torque[0] = 0.f;
-	}
-
-	if (_surface_serves[1]) {
-		// The pods and tail produce no pitch torque: only the uncredited
-		// surface share corrects the matrix residual, with nothing achieved
-		// or held to subtract
-		status.unallocated_torque[1] += uncredited * _surface_torque(1);
-
-	} else if (_saturation_flags.pitch_pos) {
-		status.unallocated_torque[1] = 1.f;
-
-	} else if (_saturation_flags.pitch_neg) {
-		status.unallocated_torque[1] = -1.f;
-
-	} else {
-		status.unallocated_torque[1] = 0.f;
-	}
-
-	if (_surface_serves[2]) {
-		status.unallocated_torque[2] = discountHeld(status.unallocated_torque[2]
-					       + uncredited * _surface_torque(2) - _achieved_yaw, _held_yaw);
-
-	} else if (_saturation_flags.yaw_pos) {
-		status.unallocated_torque[2] = 1.f;
-
-	} else if (_saturation_flags.yaw_neg) {
-		status.unallocated_torque[2] = -1.f;
-
-	} else {
-		status.unallocated_torque[2] = 0.f;
-	}
-
-	if (_saturation_flags.thrust_x_pos) {
-		status.unallocated_thrust[0] = 1.f;
-
-	} else if (_saturation_flags.thrust_x_neg) {
-		status.unallocated_thrust[0] = -1.f;
-
-	} else {
-		status.unallocated_thrust[0] = 0.f;
-	}
-
-	// A lateral demand has no actuator to serve it and must not read as
-	// allocated: report it like any other unserved axis
-	if (_saturation_flags.thrust_y_pos) {
-		status.unallocated_thrust[1] = 1.f;
-
-	} else if (_saturation_flags.thrust_y_neg) {
-		status.unallocated_thrust[1] = -1.f;
-
-	} else {
-		status.unallocated_thrust[1] = 0.f;
-	}
-
-	if (_saturation_flags.thrust_z_pos) {
-		status.unallocated_thrust[2] = 1.f;
-
-	} else if (_saturation_flags.thrust_z_neg) {
-		status.unallocated_thrust[2] = -1.f;
-
-	} else {
-		status.unallocated_thrust[2] = 0.f;
+		// A lateral demand has no actuator to serve it and must not read as
+		// allocated: it is reported like any other unserved axis
+		status.unallocated_thrust[axis] = _unallocated_thrust[axis];
 	}
 }
