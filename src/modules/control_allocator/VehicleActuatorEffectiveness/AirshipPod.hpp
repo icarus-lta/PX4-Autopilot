@@ -1,0 +1,108 @@
+/****************************************************************************
+ *
+ *   Copyright (c) 2026 PX4 Development Team. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ * 3. Neither the name PX4 nor the names of its contributors may be
+ *    used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ ****************************************************************************/
+
+/**
+ * @file AirshipPod.hpp
+ *
+ * One airship propulsion pod: a non-reversible propeller on an end-stop
+ * tilt servo. Tilt 0 is thrust forward, positive tilts the thrust up [rad];
+ * the force demand is (forward, up) in normalized pod units. Pure math, no
+ * parameters, no uORB.
+ */
+
+#pragma once
+
+#include <float.h>
+#include <lib/mathlib/mathlib.h>
+#include <lib/matrix/matrix/math.hpp>
+#include <lib/slew_rate/SlewRate.hpp>
+
+class AirshipPod
+{
+public:
+	// The tilt follows the demand direction only above the engage floor, holds
+	// its setpoint between release and engage, and is released where it stands
+	// below release (a direction near zero magnitude is noise) [normalized]
+	static constexpr float kSteerEngage = 0.02f;
+	static constexpr float kSteerRelease = 0.01f;
+
+	// Share of the demand a range end must realize beyond the other before
+	// the tilt switches ends (floored at kSteerRelease); also the half-width
+	// of the straight-back cone where +-180 deg are one direction
+	static constexpr float kEndSwitchMargin = 0.05f;
+
+	static constexpr float kMinTiltSpan = 1e-3f;		///< below this range the pod is a fixed mount [rad]
+	static constexpr float kTiltSettledTolerance = 1e-3f;	///< the tilt counts as at its setpoint [rad]
+
+	/** Tilt range [rad]; an inverted pair is a fixed mount at tilt_min. Pulls the tilt and its setpoint into the range */
+	void setTiltRange(float tilt_min, float tilt_max);
+
+	/** Tilt slew rate limit [rad/s]; 0 = unlimited */
+	void setTiltSlewRate(float slew_rate) { _slew_rate = slew_rate; }
+
+	bool canTilt() const { return _tilt_max - _tilt_min > kMinTiltSpan; }
+
+	/** Steer the tilt toward a force demand (forward, up) and advance it by dt [s] */
+	void steer(const matrix::Vector2f &force, float dt);
+
+	/** Park the tilt as close to level as the range allows */
+	void park(float dt);
+
+	float tilt() const { return _tilt.getState(); }	///< realized tilt [rad]
+	void setTilt(float tilt) { _tilt.setForcedValue(tilt); }
+
+	/** Servo output [-1, 1] of the realized tilt over the range */
+	float servoSetpoint() const;
+
+	/** Read a clamped servo output back into the realized tilt */
+	void setServoSetpoint(float servo_sp);
+
+	/** Unit vector (forward, up) the propeller thrusts along at the realized tilt */
+	matrix::Vector2f thrustAxis() const { return matrix::Vector2f{cosf(tilt()), sinf(tilt())}; }
+
+	/** The tilt sits at its setpoint inside the steer band: what it withholds is by choice */
+	bool heldInBand() const;
+
+private:
+	enum class TiltMode : uint8_t { Parked, Steering, Holding, Released };
+
+	float steerTarget(const matrix::Vector2f &force, float magnitude) const;
+	void slewToSetpoint(float dt);
+
+	SlewRate<float> _tilt{};	///< realized tilt [rad]
+	float _tilt_sp{0.f};		///< tilt setpoint the slew tracks [rad]; stands through the steer band
+	float _tilt_min{0.f};		///< [rad]
+	float _tilt_max{0.f};		///< [rad], >= _tilt_min
+	float _slew_rate{0.f};		///< [rad/s], 0 = unlimited
+	TiltMode _mode{TiltMode::Parked};
+};
