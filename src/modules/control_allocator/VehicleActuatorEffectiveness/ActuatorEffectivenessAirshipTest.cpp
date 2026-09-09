@@ -325,9 +325,10 @@ TEST(ActuatorEffectivenessAirshipTest, TiltRangeLimited)
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 
-	// Reverse is unreachable: the starboard tilt clamps to the +90 deg limit
-	// and the starboard demand has no feasible component along it.
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f); // +90 deg = range maximum
+	// Reverse is unreachable at either end: the starboard tilt stays level
+	// instead of sweeping to a limit that realizes nothing, and the motor
+	// clamps off
+	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);      // 0 deg = range center
 	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 0.f, 1e-6f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
@@ -335,6 +336,34 @@ TEST(ActuatorEffectivenessAirshipTest, TiltRangeLimited)
 	control_allocator_status_s status{};
 	airship.getUnallocatedControl(0, status);
 	EXPECT_FLOAT_EQ(status.unallocated_torque[2], 1.f); // half the couple is missing
+}
+
+TEST(ActuatorEffectivenessAirshipTest, NoReverseEndHoldsTheTilt)
+{
+	// Symmetric -90..+90 deg range (the Cloudship geometry): straight back
+	// is realizable at neither end, so the cone must not commit the tilt
+	// to a 90 deg excursion that produces nothing and modulates the forward
+	// thrust on the way back
+	resetAirshipParams(-90.f, 90.f);
+	setCollectiveMode();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = 0.5f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(COLLECTIVE_TILT), 0.f);
+
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_FLOAT_EQ(actuator_sp(COLLECTIVE_TILT), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
+
+	// The shortfall is real and reported: nothing was held by choice
+	control_allocator_status_s status{};
+	airship.getUnallocatedControl(0, status);
+	EXPECT_FLOAT_EQ(status.unallocated_thrust[0], -1.f);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, CollectiveModeCruiseAndClimb)

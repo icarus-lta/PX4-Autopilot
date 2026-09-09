@@ -283,11 +283,17 @@ ActuatorEffectivenessAirship::steerTarget(const float fx, const float fz, const 
 		// demand best, on a tie keep the committed end.
 		const float rear_hi = math::constrain(M_PI_F, tilt_min, tilt_max);
 		const float rear_lo = math::constrain(-M_PI_F, tilt_min, tilt_max);
-		const float cos_hi = cosf(rear_hi);
-		const float cos_lo = cosf(rear_lo);
+		const float reverse_hi = -cosf(rear_hi);	// reverse share each end can realize
+		const float reverse_lo = -cosf(rear_lo);
 
-		if (fabsf(cos_hi - cos_lo) > FLT_EPSILON) {
-			tilt = cos_hi < cos_lo ? rear_hi : rear_lo;
+		if (fmaxf(reverse_hi, reverse_lo) <= FLT_EPSILON) {
+			// No end points backward at all (e.g. -90..90): a sweep would
+			// realize nothing, so the tilt stays put and the shortfall is
+			// reported as-is
+			tilt = committed;
+
+		} else if (fabsf(reverse_hi - reverse_lo) > FLT_EPSILON) {
+			tilt = reverse_hi > reverse_lo ? rear_hi : rear_lo;
 
 		} else {
 			tilt = committed >= 0.f ? rear_hi : rear_lo;
