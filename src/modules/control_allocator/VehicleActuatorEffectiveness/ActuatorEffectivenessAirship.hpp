@@ -31,12 +31,32 @@
  *
  ****************************************************************************/
 
+/**
+ * @file ActuatorEffectivenessAirship.hpp
+ *
+ * Actuator effectiveness for an airship with two side propulsion pods
+ * symmetric about the CoG, each on a non-reversible propeller that tilts
+ * about the body y axis (0 = thrust forward, positive = up), optionally a
+ * tail yaw thruster (motor 3) and control surfaces.
+ *
+ * The pods are allocated in closed form in updateSetpoint(): the demand is
+ * split into a per-pod force, index 0 = starboard and 1 = port, as
+ * fx = thrust_x -/+ yaw and fz = thrust_up -/+ roll with thrust_up = -thrust_z,
+ * yaw and roll net of the credited control-surface torque, all normalized.
+ * The tilt is the direction of that force and the motor its projection onto
+ * the realized tilt, so the pods produce no pitch torque and reach reverse
+ * thrust only by tilting. Collective grouping (CA_AIRSHIP_GRP = 0) gives both
+ * pods the same force on one tilt servo. Control surfaces are allocated by
+ * the matrix; the pods and the tail serve what they leave unmet.
+ */
+
 #pragma once
 
 #include "control_allocation/actuator_effectiveness/ActuatorEffectiveness.hpp"
 #include "ActuatorEffectivenessControlSurfaces.hpp"
 
 #include <drivers/drv_hrt.h>
+#include <lib/mathlib/mathlib.h>
 #include <lib/slew_rate/SlewRate.hpp>
 #include <px4_platform_common/module_params.h>
 #include <uORB/Subscription.hpp>
@@ -68,9 +88,13 @@ public:
 	static constexpr float kTiltSteerRelease = 0.01f;
 
 	// Pointing (near-)straight back, +180 and -180 deg realize the same thrust
-	// direction at opposite ends of an end-stop servo: within this cone of the
-	// negative x axis the previously committed end is kept, so perpendicular
-	// noise cannot command a full-range sweep.
+	// direction at opposite ends of an end-stop servo: inside this cone of the
+	// negative x axis (|fz| < kTiltRearCone * |f|: a ratio, sin of the ~3 deg
+	// half-angle; floored at kTiltSteerRelease for low demand) the end that
+	// realizes the demand best is chosen and on a tie the committed end is
+	// kept, so perpendicular noise cannot command a full-range sweep. The same
+	// margin, in pod-force units, is the hysteresis for switching range ends
+	// when the target falls outside the tilt range.
 	static constexpr float kTiltRearCone = 0.05f;
 
 private:
@@ -91,12 +115,33 @@ private:
 	static void setSaturationFlag(float coeff, bool &positive_flag, bool &negative_flag);
 	static float discountHeld(float residual, float held_part);
 
+	/**
+	 * Tilt a pod should steer to for a force demand above the steer band
+	 * @param fx, fz pod force demand (forward, up), magnitude its norm
+	 * @param committed the pod's current tilt target [rad]
+	 * @return the target within [tilt_min, tilt_max] [rad]
+	 */
+	static float steerTarget(float fx, float fz, float magnitude, float committed, float tilt_min, float tilt_max);
+
+	/** Write the realized tilts to the servo outputs and read the clamped angles back */
+	void writeTiltServos(ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
+			     const ActuatorVector &actuator_max, float tilt_min, float tilt_span);
+
+	float tiltMin() const { return math::radians(_param_ca_airship_tlmin.get()); }
+	float tiltMax() const { return math::radians(_param_ca_airship_tlmax.get()); }
+
 	SaturationFlags _saturation_flags{};
 
 	SlewRate<float> _tilt[2] {};	///< realized tilt [rad], held through zero-thrust
 	float _tilt_target[2] {};	///< commanded tilt [rad] the slew tracks; holds through the hysteresis band
 	bool _tilt_steering[2] {};	///< per-pod hysteresis state of the direction hold
-	bool _armed{true};		///< assume armed until actuator_armed reports otherwise
+
+	// Unlike the spool-up siblings, the disarmed branch is the active one
+	// here (it parks the tilts), so the default is the no-op: it only shows
+	// where nothing publishes actuator_armed, i.e. the unit tests, which
+	// must steer. On a vehicle the commander's boot sample (disarmed) is
+	// read on the first update and parks the pods.
+	bool _armed{true};
 	hrt_abstime _last_update_time{0};
 
 	uORB::Subscription _actuator_armed_sub{ORB_ID(actuator_armed)};
