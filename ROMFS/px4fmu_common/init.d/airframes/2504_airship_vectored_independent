@@ -20,13 +20,14 @@
 
 param set-default COM_PREARM_MODE 2
 
-# Independently vectored side pods; the tilt range and slew rate are
-# placeholders pending the vehicle specification
+# Independently vectored side pods with a full 360 deg tilt range: set
+# CA_AIRSHIP_TLMIN/TLMAX to the tilt angles at the servo end stops and
+# CA_AIRSHIP_TLT_R to the servo slew rate of the vehicle
 param set-default CA_AIRFRAME 16
 param set-default CA_AIRSHIP_GRP 1
 param set-default CA_AIRSHIP_TLMIN -180
 param set-default CA_AIRSHIP_TLMAX 180
 param set-default CA_AIRSHIP_TLT_R 120
 
-# THR_MDL_FAC stays at default pending a measured thrust curve; the AS_YAWRATE
-# defaults were tuned on the linearized gz twin
+# Set THR_MDL_FAC from the measured thrust curve; the AS_YAWRATE_* defaults
+# were tuned in the gz airship_vectored_independent model with THR_MDL_FAC 1

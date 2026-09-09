@@ -36,8 +36,9 @@ param set-default SIM_GZ_EC_MAX2 300
 # normalized torque demand is the torque the pods deliver at every level
 param set-default THR_MDL_FAC 1
 
-# Tilt servos: 1 = starboard, 2 = port; the angle range is a placeholder
-# pending the vehicle specification
+# Tilt servos: 1 = starboard, 2 = port. The angle range must equal
+# CA_AIRSHIP_TLMIN/TLMAX below: the allocator projects thrust with the
+# CA range and the gz servo bridge maps the servo output onto this one
 param set-default SIM_GZ_SV_FUNC1 201
 param set-default SIM_GZ_SV_FUNC2 202
 param set-default SIM_GZ_SV_MINA1 -180
