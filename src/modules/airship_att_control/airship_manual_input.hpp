@@ -32,43 +32,48 @@
  ****************************************************************************/
 
 /**
- * @file airship_yaw_rate.hpp
+ * @file airship_manual_input.hpp
  *
- * Stick to yaw rate setpoint mapping and the mode gate of the yaw rate loop,
- * kept free of uORB I/O so they can be unit tested.
+ * Stick to thrust and torque setpoint mapping of the manual passthrough,
+ * kept free of uORB I/O so it can be unit tested.
  */
 
 #pragma once
 
-#include "airship_manual_input.hpp"
+#include <lib/matrix/matrix/math.hpp>
+#include <px4_platform_common/defines.h>
+#include <uORB/topics/manual_control_setpoint.h>
 
-#include <lib/mathlib/mathlib.h>
-#include <uORB/topics/vehicle_control_mode.h>
-
-namespace airship_yaw_rate
+namespace airship_manual_input
 {
 
+/** NaN marks a manual channel without valid data: read it as released */
+inline float finiteOr(float value, float fallback)
+{
+	return PX4_ISFINITE(value) ? value : fallback;
+}
+
 /**
- * Map the yaw stick to a yaw rate setpoint [rad/s].
+ * Thrust setpoint per body axis: throttle forward, the pitch stick vertical.
  *
- * Deadzone first (MAN_DEADZONE, as mc_att_control and lib/sticks apply it),
- * then linear scaling to max_rate; a non-finite stick reads as released.
+ * Stick forward descends (+pitch = stick forward, +z = down in FRD). The
+ * pitch stick is also pitch torque in torque(): tilting pods serve this
+ * thrust, elevators serve that torque; the channel an airframe cannot serve
+ * is reported unallocated.
  */
-inline float setpointFromStick(float stick, float deadzone, float max_rate)
+inline matrix::Vector3f thrust(const manual_control_setpoint_s &sticks)
 {
-	return math::deadzone(airship_manual_input::finiteOr(stick, 0.f), deadzone) * max_rate;
+	return matrix::Vector3f{(finiteOr(sticks.throttle, -1.f) + 1.f) * 0.5f, 0.f, finiteOr(sticks.pitch, 0.f)};
 }
 
 /**
- * Whether the yaw rate loop closes on the stick: manual modes with rate
- * control (Acro, Stabilized, Altitude, Position). Manual has rates off and
- * the non-manual modes have no setpoint source here yet; both keep the
- * torque passthrough.
+ * Torque setpoint per body axis: the sticks straight through.
+ *
+ * Stick forward is nose down: negative pitch rotation in FRD.
  */
-inline bool loopActive(const vehicle_control_mode_s &control_mode, bool manual_input_usable)
+inline matrix::Vector3f torque(const manual_control_setpoint_s &sticks)
 {
-	return manual_input_usable && control_mode.flag_control_manual_enabled
-	       && control_mode.flag_control_rates_enabled;
+	return matrix::Vector3f{finiteOr(sticks.roll, 0.f), -finiteOr(sticks.pitch, 0.f), finiteOr(sticks.yaw, 0.f)};
 }
 
-} // namespace airship_yaw_rate
+} // namespace airship_manual_input

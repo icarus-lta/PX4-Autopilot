@@ -37,7 +37,7 @@
 
 using namespace airship_yaw_rate;
 
-static constexpr float kMaxRate = 0.2618f; // 15 deg/s
+static constexpr float kMaxRate = math::radians(15.f); // AS_YAWRATE_MAX default, as the module converts it
 static constexpr float kDeadzone = 0.1f;
 
 TEST(AirshipYawRateTest, ReleasedStickCommandsZero)
@@ -47,6 +47,7 @@ TEST(AirshipYawRateTest, ReleasedStickCommandsZero)
 	EXPECT_FLOAT_EQ(setpointFromStick(0.05f, kDeadzone, kMaxRate), 0.f);
 	EXPECT_FLOAT_EQ(setpointFromStick(-0.099f, kDeadzone, kMaxRate), 0.f);
 	EXPECT_FLOAT_EQ(setpointFromStick(kDeadzone, kDeadzone, kMaxRate), 0.f);
+	EXPECT_FLOAT_EQ(setpointFromStick(-kDeadzone, kDeadzone, kMaxRate), 0.f);
 }
 
 TEST(AirshipYawRateTest, LinearAndContinuousOutsideDeadzone)
@@ -94,7 +95,7 @@ TEST(AirshipYawRateTest, LoopStaysOpenWithoutRatesOrPilot)
 
 	mode.flag_control_rates_enabled = true;
 	mode.flag_control_manual_enabled = false;
-	EXPECT_FALSE(loopActive(mode, true)); // Hold, Land, Descend: no pilot input mixed in
+	EXPECT_FALSE(loopActive(mode, true)); // Hold, Land, Descend: manual input not mixed in
 
 	mode.flag_control_manual_enabled = true;
 	EXPECT_FALSE(loopActive(mode, false)); // disarmed or lost sticks
