@@ -141,15 +141,6 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		_armed = armed.armed;
 	}
 
-	// Clamp dt like the allocator's own scheduling guard (same 0.2 ms floor
-	// as ControlAllocator::Run: it only bites above 5 kHz, and keeps a
-	// zero-length interval from stalling the slew); the 100 ms ceiling,
-	// looser than the allocator's 20 ms, only bounds the first step after
-	// a scheduling gap
-	const hrt_abstime now = hrt_absolute_time();
-	const float dt = math::constrain((now - _last_update_time) * 1e-6f, 2e-4f, 0.1f);
-	_last_update_time = now;
-
 	bool retargeted[2] {};	// the demand recomputed the tilt direction this update
 
 	for (int i = 0; i < 2; i++) {
@@ -184,7 +175,7 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		// The tilt is a physical state: rate-limit it toward the target
 		if (_param_ca_airship_tlt_r.get() > 0.f) {
 			_tilt[i].setSlewRate(math::radians(_param_ca_airship_tlt_r.get()));
-			_tilt[i].update(_tilt_target[i], dt);
+			_tilt[i].update(_tilt_target[i], _dt);
 
 		} else {
 			_tilt[i].setForcedValue(_tilt_target[i]);
