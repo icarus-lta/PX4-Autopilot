@@ -72,11 +72,11 @@ TEST(AirshipPodTest, DemandAtTheReleaseThresholdReleases)
 	EXPECT_GT(first_step, 0.f);
 
 	// Exactly at the release threshold the hold is not kept (strict
-	// comparison): the setpoint drops to the current tilt and the slew stops
+	// comparison): the target drops to the current tilt and the slew stops
 	slewing.steer(force(0.f, AirshipPod::kSteerRelease), kDt);
 	slewing.steer(force(0.f, AirshipPod::kSteerRelease), kDt);
 	EXPECT_FLOAT_EQ(slewing.tilt(), first_step);
-	EXPECT_TRUE(slewing.heldInBand());
+	EXPECT_TRUE(slewing.heldByChoice());
 }
 
 TEST(AirshipPodTest, ReversalInsideTheBandDoesNotRetarget)
@@ -85,10 +85,10 @@ TEST(AirshipPodTest, ReversalInsideTheBandDoesNotRetarget)
 	full.steer(force(0.f, 0.5f), kDt);
 	EXPECT_FLOAT_EQ(full.tilt(), math::radians(90.f));
 
-	// A reversed demand between release and engage holds the setpoint
+	// A reversed demand between release and engage holds the target
 	full.steer(force(0.f, -0.015f), kDt);
 	EXPECT_FLOAT_EQ(full.tilt(), math::radians(90.f));
-	EXPECT_TRUE(full.heldInBand());
+	EXPECT_TRUE(full.heldByChoice());
 
 	// Above the engage floor it is a real demand
 	full.steer(force(0.f, -0.5f), kDt);
@@ -102,16 +102,16 @@ TEST(AirshipPodTest, HoldingKeepsSlewingAndReleaseFreezes)
 	const float first_step = slewing.tilt();
 	EXPECT_NEAR(first_step, math::radians(1.8f), 1e-6f);
 
-	// Inside the band the setpoint stands, so the tilt keeps moving toward it
+	// Inside the band the target stands, so the tilt keeps moving toward it
 	slewing.steer(force(-0.015f, 0.f), kDt);
 	EXPECT_NEAR(slewing.tilt(), math::radians(3.6f), 1e-6f);
-	EXPECT_FALSE(slewing.heldInBand()); // not settled yet
+	EXPECT_FALSE(slewing.heldByChoice()); // not settled yet
 
 	// Released mid-slew: the tilt freezes where it is
 	slewing.steer(force(0.f, 0.f), kDt);
 	slewing.steer(force(0.f, 0.f), kDt);
 	EXPECT_NEAR(slewing.tilt(), math::radians(3.6f), 1e-6f);
-	EXPECT_TRUE(slewing.heldInBand());
+	EXPECT_TRUE(slewing.heldByChoice());
 }
 
 TEST(AirshipPodTest, NanDemandReleasesAndLeavesTheStateFinite)
@@ -207,7 +207,7 @@ TEST(AirshipPodTest, ParkLevelsWithinTheRange)
 	up_only.steer(force(0.f, 1.f), kDt);
 	up_only.park(kDt);
 	EXPECT_FLOAT_EQ(up_only.tilt(), 0.f);
-	EXPECT_FALSE(up_only.heldInBand());
+	EXPECT_FALSE(up_only.heldByChoice());
 
 	AirshipPod down_only = pod(-180.f, -30.f);
 	down_only.park(kDt);
@@ -217,7 +217,7 @@ TEST(AirshipPodTest, ParkLevelsWithinTheRange)
 TEST(AirshipPodTest, ServoRoundTripAndClampReadBack)
 {
 	AirshipPod full = pod(-180.f, 180.f);
-	full.setTilt(M_PI_F);
+	full.steer(force(-1.f, 0.f), kDt);
 	EXPECT_FLOAT_EQ(full.servoSetpoint(), 1.f);
 
 	// A servo output clamped at 0.5 realizes +90 deg
@@ -226,7 +226,7 @@ TEST(AirshipPodTest, ServoRoundTripAndClampReadBack)
 	EXPECT_FLOAT_EQ(full.servoSetpoint(), 0.5f);
 }
 
-TEST(AirshipPodTest, RangeNarrowingClampsTheStateAndTheSetpoint)
+TEST(AirshipPodTest, RangeNarrowingClampsTheStateAndTheTarget)
 {
 	AirshipPod full = pod(-180.f, 180.f);
 	full.steer(force(-1.f, 0.f), kDt);
@@ -245,18 +245,24 @@ TEST(AirshipPodTest, RangeNarrowingClampsTheStateAndTheSetpoint)
 	EXPECT_FLOAT_EQ(full.tilt(), math::radians(30.f));
 }
 
-TEST(AirshipPodTest, HeldInBandTruthTable)
+TEST(AirshipPodTest, HeldByChoiceTruthTable)
 {
 	AirshipPod full = pod(-180.f, 180.f);
 	full.steer(force(0.f, 1.f), kDt);
-	EXPECT_FALSE(full.heldInBand()); // steering
+	EXPECT_FALSE(full.heldByChoice()); // steering
 
 	full.steer(force(0.f, 0.015f), kDt);
-	EXPECT_TRUE(full.heldInBand()); // holding, settled
+	EXPECT_TRUE(full.heldByChoice()); // holding, settled
 
 	full.steer(force(0.f, 0.f), kDt);
-	EXPECT_TRUE(full.heldInBand()); // released, settled
+	EXPECT_TRUE(full.heldByChoice()); // released, settled
 
 	full.park(kDt);
-	EXPECT_FALSE(full.heldInBand()); // parked
+	EXPECT_FALSE(full.heldByChoice()); // parked
+
+	// A fixed mount withholds nothing by choice: holding and settled, but not held
+	AirshipPod fixed = pod(0.f, 0.f);
+	fixed.steer(force(0.f, 1.f), kDt);
+	fixed.steer(force(0.f, 0.015f), kDt);
+	EXPECT_FALSE(fixed.heldByChoice());
 }
