@@ -34,6 +34,7 @@
 #include "ActuatorEffectivenessAirship.hpp"
 
 #include <float.h>
+#include <lib/mathlib/mathlib.h>
 
 using namespace matrix;
 
@@ -79,6 +80,13 @@ ActuatorEffectivenessAirship::getEffectivenessMatrix(Configuration &configuratio
 		configuration.addActuator(ActuatorType::MOTORS, Vector3f{}, Vector3f{});
 	}
 
+	// The surfaces come first because their count is a parameter the ground
+	// station reads too, while the tilt count follows the tilt range: declared
+	// last, a count the actuator metadata cannot express leaves a trailing
+	// entry instead of shifting every surface (as ActuatorEffectivenessTiltrotorVTOL)
+	_first_control_surface_idx = configuration.num_actuators_matrix[0];
+	const bool surfaces_added = _control_surfaces.addActuators(configuration);
+
 	_first_tilt_idx = configuration.num_actuators_matrix[0];
 	_num_tilt_servos = 0;
 
@@ -89,9 +97,6 @@ ActuatorEffectivenessAirship::getEffectivenessMatrix(Configuration &configuratio
 	for (int i = 0; i < _num_tilt_servos; i++) {
 		configuration.addActuator(ActuatorType::SERVOS, Vector3f{}, Vector3f{});
 	}
-
-	_first_control_surface_idx = configuration.num_actuators_matrix[0];
-	const bool surfaces_added = _control_surfaces.addActuators(configuration);
 
 	for (int axis = 0; axis < 3; axis++) {
 		_surface_serves[axis] = false;
