@@ -42,7 +42,6 @@
 
 #pragma once
 
-#include <lib/mathlib/mathlib.h>
 #include <lib/matrix/matrix/math.hpp>
 #include <lib/slew_rate/SlewRate.hpp>
 
