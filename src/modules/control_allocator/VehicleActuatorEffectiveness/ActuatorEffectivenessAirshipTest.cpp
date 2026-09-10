@@ -49,16 +49,23 @@ static constexpr int MOTOR_TAIL = ActuatorEffectivenessAirship::TAIL;
 static constexpr int TAIL_TILT_STARBOARD = 3;
 static constexpr int TAIL_TILT_PORT = 4;
 
-// Surfaces follow the tilts (_first_control_surface_idx); setSurfaces()
+// Surfaces precede the tilts (_first_control_surface_idx); setSurfaces()
 // declares an elevator then a rudder
-static constexpr int SURFACE_FIRST = 4;
+static constexpr int SURFACE_FIRST = 2;
 static constexpr int SURFACE_ELEVATOR = SURFACE_FIRST;
 static constexpr int SURFACE_RUDDER = SURFACE_FIRST + 1;
+
+// The tilts follow the surfaces, so their index counts the declared ones:
+// two for setSurfaces(), one for the single-aileron configurations
+static constexpr int SURFACES_TILT_STARBOARD = SURFACE_FIRST + 2;
+static constexpr int SURFACES_TILT_PORT = SURFACE_FIRST + 3;
+static constexpr int AILERON_TILT_STARBOARD = SURFACE_FIRST + 1;
+static constexpr int AILERON_TILT_PORT = SURFACE_FIRST + 2;
 
 // Collective grouping registers a single tilt servo
 static constexpr int COLLECTIVE_TILT = 2;
 static constexpr int TAIL_COLLECTIVE_TILT = 3;
-static constexpr int TAIL_COLLECTIVE_RUDDER = 5;
+static constexpr int TAIL_COLLECTIVE_RUDDER = 4;
 
 // The allocator's dt ceiling: the largest step it hands the effectiveness [s]
 static constexpr float kDt = 0.02f;
@@ -853,7 +860,7 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceConfiguration)
 	setSurfaces();
 	ActuatorEffectivenessAirship airship(nullptr);
 
-	// The elevator and rudder follow the tilts, with matrix effectiveness
+	// The elevator and rudder precede the tilts, with matrix effectiveness
 	ActuatorEffectiveness::Configuration configuration{};
 	EXPECT_TRUE(airship.getEffectivenessMatrix(configuration, EffectivenessUpdateReason::MOTOR_ACTIVATION_UPDATE));
 	EXPECT_EQ(configuration.num_actuators_matrix[0], 6);
@@ -861,6 +868,24 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceConfiguration)
 	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::SERVOS], 4);
 	EXPECT_FLOAT_EQ(configuration.effectiveness_matrices[0](1, SURFACE_ELEVATOR), 1.f);
 	EXPECT_FLOAT_EQ(configuration.effectiveness_matrices[0](2, SURFACE_RUDDER), 1.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, SurfaceIndicesDoNotMoveWithTheTiltCount)
+{
+	// The tilt count follows the tilt range, which the ground station's
+	// actuator list cannot express. Declared after the surfaces it can only
+	// add entries behind them, never shift them
+	for (const float tilt_deg : {180.f, 0.f}) {
+		resetAirshipParams(-tilt_deg, tilt_deg);
+		setSurfaces();
+		ActuatorEffectivenessAirship airship(nullptr);
+
+		ActuatorEffectiveness::Configuration configuration{};
+		EXPECT_TRUE(airship.getEffectivenessMatrix(configuration, EffectivenessUpdateReason::MOTOR_ACTIVATION_UPDATE));
+		EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::SERVOS], tilt_deg > 0.f ? 4 : 2);
+		EXPECT_FLOAT_EQ(configuration.effectiveness_matrices[0](1, SURFACE_ELEVATOR), 1.f);
+		EXPECT_FLOAT_EQ(configuration.effectiveness_matrices[0](2, SURFACE_RUDDER), 1.f);
+	}
 }
 
 TEST(ActuatorEffectivenessAirshipTest, SurfacesKeepTheirSetpoints)
@@ -907,8 +932,8 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditScalesPodShare)
 
 		EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), c.motor);
 		EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), c.motor);
-		EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f); // +180 deg
-		EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);      // forward
+		EXPECT_FLOAT_EQ(actuator_sp(SURFACES_TILT_STARBOARD), 1.f); // +180 deg
+		EXPECT_FLOAT_EQ(actuator_sp(SURFACES_TILT_PORT), 0.f);      // forward
 		EXPECT_FLOAT_EQ(actuator_sp(SURFACE_RUDDER), 0.6f); // the matrix allocation stands
 
 		// The uncredited rudder share cancels against the solver residual:
@@ -942,8 +967,8 @@ TEST(ActuatorEffectivenessAirshipTest, RollSurfaceCreditedAgainstDifferentialRol
 
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.4f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.4f);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), -0.5f); // -90 deg, down
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.5f);       // +90 deg, up
+	EXPECT_FLOAT_EQ(actuator_sp(AILERON_TILT_STARBOARD), -0.5f); // -90 deg, down
+	EXPECT_FLOAT_EQ(actuator_sp(AILERON_TILT_PORT), 0.5f);       // +90 deg, up
 
 	control_allocator_status_s status{};
 	status.unallocated_torque[0] = 0.4f; // matrix residual: demand minus aileron
@@ -1003,8 +1028,8 @@ TEST(ActuatorEffectivenessAirshipTest, RollSurfaceServedBandShortfallIsNotSatura
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 	actuator_sp(SURFACE_FIRST) = demand; // the matrix allocates the full demand to the unit aileron
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(AILERON_TILT_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(AILERON_TILT_PORT), 0.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
 
@@ -1340,12 +1365,13 @@ TEST(ActuatorEffectivenessAirshipTest, TiltRangeNarrowedAtRuntimeReclampsHeldTil
 {
 	resetAirshipParams();
 
-	// updateParams() is protected: expose it to simulate the allocator's
-	// parameter-update path at runtime
-	struct AirshipUnderTest : ActuatorEffectivenessAirship {
-		using ActuatorEffectivenessAirship::ActuatorEffectivenessAirship;
-		using ActuatorEffectivenessAirship::updateParams;
-	} airship{nullptr};
+	// Drive the parameter update the way the allocator does: a notification on
+	// the parent cascades to every ModuleParams child
+	struct ParamOwner : ModuleParams {
+		ParamOwner() : ModuleParams(nullptr) {}
+		using ModuleParams::updateParams;
+	} owner;
+	ActuatorEffectivenessAirship airship{&owner};
 
 	// Commit to the +180 deg end with the full default range
 	Vector<float, 6> control_sp{};
@@ -1361,7 +1387,7 @@ TEST(ActuatorEffectivenessAirshipTest, TiltRangeNarrowedAtRuntimeReclampsHeldTil
 	float zero = 0.f;
 	param_set(param_find("CA_AIRSHIP_TLMIN"), &zero);
 	param_set(param_find("CA_AIRSHIP_TLMAX"), &zero);
-	airship.updateParams();
+	owner.updateParams();
 
 	const float below_release = 0.5f * AirshipPod::kSteerRelease;
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = below_release;
@@ -1744,7 +1770,7 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceServedBandShortfallIsNotSaturation
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 	actuator_sp(SURFACE_RUDDER) = demand; // the matrix allocates the full demand to the unit rudder
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.f);
+	EXPECT_FLOAT_EQ(actuator_sp(SURFACES_TILT_STARBOARD), 0.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
 	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.5f * demand, 1e-6f);
 
@@ -1771,8 +1797,8 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceServedSwingShortfallStands)
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 	actuator_sp(SURFACE_RUDDER) = 0.6f;
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
-	EXPECT_GT(actuator_sp(TILT_STARBOARD), 0.f);
-	EXPECT_LT(actuator_sp(TILT_STARBOARD), 0.2f);
+	EXPECT_GT(actuator_sp(SURFACES_TILT_STARBOARD), 0.f);
+	EXPECT_LT(actuator_sp(SURFACES_TILT_STARBOARD), 0.2f);
 
 	control_allocator_status_s status{};
 	status.unallocated_torque[2] = 0.4f; // matrix residual: demand minus rudder
