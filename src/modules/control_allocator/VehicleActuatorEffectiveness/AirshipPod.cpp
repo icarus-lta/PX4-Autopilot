@@ -34,6 +34,7 @@
 #include "AirshipPod.hpp"
 
 #include <float.h>
+#include <lib/mathlib/mathlib.h>
 
 using namespace matrix;
 

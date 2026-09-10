@@ -51,7 +51,6 @@
 #include "ActuatorEffectivenessControlSurfaces.hpp"
 #include "AirshipPod.hpp"
 
-#include <lib/mathlib/mathlib.h>
 #include <px4_platform_common/module_params.h>
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/vehicle_status.h>
@@ -81,10 +80,9 @@ public:
 
 	const char *name() const override { return "Airship"; }
 
-protected:
+private:
 	void updateParams() override;
 
-private:
 	/** Refresh _armed from vehicle_status; the last sample holds between updates */
 	void updateArmedState();
 
