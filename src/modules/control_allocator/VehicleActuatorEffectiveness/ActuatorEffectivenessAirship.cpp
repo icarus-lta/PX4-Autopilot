@@ -80,10 +80,11 @@ ActuatorEffectivenessAirship::getEffectivenessMatrix(Configuration &configuratio
 		configuration.addActuator(ActuatorType::MOTORS, Vector3f{}, Vector3f{});
 	}
 
-	// The surfaces come first because their count is a parameter the ground
-	// station reads too, while the tilt count follows the tilt range: declared
-	// last, a count the actuator metadata cannot express leaves a trailing
-	// entry instead of shifting every surface (as ActuatorEffectivenessTiltrotorVTOL)
+	// Surfaces before tilts, as ActuatorEffectivenessTiltrotorVTOL declares
+	// them: the surface count is a parameter the ground station reads too,
+	// while the tilt count follows the tilt range. Declared last, a count the
+	// actuator metadata cannot express leaves a trailing entry to be left
+	// unassigned instead of shifting every surface
 	_first_control_surface_idx = configuration.num_actuators_matrix[0];
 	const bool surfaces_added = _control_surfaces.addActuators(configuration);
 

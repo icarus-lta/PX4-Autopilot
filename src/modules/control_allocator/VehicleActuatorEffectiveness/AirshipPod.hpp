@@ -68,7 +68,7 @@ public:
 	bool canTilt() const { return _tilt_max - _tilt_min > kMinTiltSpan; }
 
 	/** Steer the tilt toward a force demand (forward, up) and advance it by dt [s] */
-	void steer(const matrix::Vector2f &force, float dt);
+	void steer(const matrix::Vector2f &demand, float dt);
 
 	/** Park the tilt as close to level as the range allows */
 	void park(float dt);
@@ -122,7 +122,7 @@ private:
 		Released	///< demand below release, NaN, or not engaged: the target is the tilt itself
 	};
 
-	float steerTarget(const matrix::Vector2f &force, float magnitude) const;
+	float steerTarget(const matrix::Vector2f &demand, float magnitude) const;
 	void slewToTarget(float dt);
 
 	SlewRate<float> _tilt{};	///< realized tilt [rad]
