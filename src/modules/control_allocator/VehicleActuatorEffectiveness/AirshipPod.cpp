@@ -113,14 +113,24 @@ float AirshipPod::steerTarget(const Vector2f &demand, const float magnitude) con
 
 		if (fmaxf(reverse_hi, reverse_lo) <= FLT_EPSILON) {
 			// No end points backward (e.g. -90..90): a sweep would realize
-			// nothing, so the tilt stays
+			// almost nothing, so the tilt stays
 			tilt = _tilt_target;
 
-		} else if (fabsf(reverse_hi - reverse_lo) > FLT_EPSILON) {
-			tilt = reverse_hi > reverse_lo ? rear_hi : rear_lo;
-
 		} else {
-			tilt = _tilt_target >= 0.f ? rear_hi : rear_lo;
+			// Both ends point backward, so rank them the way the end switch
+			// does, by what each realizes: the demand is only near straight
+			// back, and on an asymmetric range its perpendicular component
+			// decides which end is the better one. On a tie the ends share an
+			// axis, so keep the committed one
+			const float p_hi = demand.dot(Vector2f{cosf(rear_hi), sinf(rear_hi)});
+			const float p_lo = demand.dot(Vector2f{cosf(rear_lo), sinf(rear_lo)});
+
+			if (fabsf(p_hi - p_lo) > FLT_EPSILON) {
+				tilt = p_hi > p_lo ? rear_hi : rear_lo;
+
+			} else {
+				tilt = _tilt_target >= 0.f ? rear_hi : rear_lo;
+			}
 		}
 
 	} else if (tilt < _tilt_min || tilt > _tilt_max) {
