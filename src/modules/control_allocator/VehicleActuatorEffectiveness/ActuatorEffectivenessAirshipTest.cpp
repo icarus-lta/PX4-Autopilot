@@ -38,34 +38,41 @@
 
 using namespace matrix;
 
-// Actuator indices
+// The declared layout is the motors, then the control surfaces, then the tilt
+// servos (ActuatorEffectivenessAirship::getEffectivenessMatrix). Only the
+// motors sit at a fixed index; every later block moves with the counts ahead
+// of it, so name each block by the rule rather than by a number. These are an
+// INDEPENDENT model of the layout, pinned against the real Configuration by
+// DeclaredLayoutMatchesTheIndexMap
+static constexpr int numMotors(bool tail) { return tail ? 3 : 2; }
+static constexpr int firstSurface(bool tail) { return numMotors(tail); }
+static constexpr int firstTilt(bool tail, int num_surfaces) { return firstSurface(tail) + num_surfaces; }
+
 static constexpr int MOTOR_STARBOARD = ActuatorEffectivenessAirship::STARBOARD;
 static constexpr int MOTOR_PORT = ActuatorEffectivenessAirship::PORT;
-static constexpr int TILT_STARBOARD = 2;
-static constexpr int TILT_PORT = 3;
-
-// With the tail thruster (CA_AIRSHIP_TAIL) the tilts shift by one
 static constexpr int MOTOR_TAIL = ActuatorEffectivenessAirship::TAIL;
-static constexpr int TAIL_TILT_STARBOARD = 3;
-static constexpr int TAIL_TILT_PORT = 4;
 
-// Surfaces precede the tilts (_first_control_surface_idx); setSurfaces()
-// declares an elevator then a rudder
-static constexpr int SURFACE_FIRST = 2;
+// Independent grouping, no surfaces
+static constexpr int TILT_STARBOARD = firstTilt(false, 0);
+static constexpr int TILT_PORT = firstTilt(false, 0) + 1;
+static constexpr int TAIL_TILT_STARBOARD = firstTilt(true, 0);
+static constexpr int TAIL_TILT_PORT = firstTilt(true, 0) + 1;
+
+// setSurfaces() declares an elevator then a rudder, ahead of the tilts
+static constexpr int SURFACE_FIRST = firstSurface(false);
 static constexpr int SURFACE_ELEVATOR = SURFACE_FIRST;
 static constexpr int SURFACE_RUDDER = SURFACE_FIRST + 1;
+static constexpr int SURFACES_TILT_STARBOARD = firstTilt(false, 2);
+static constexpr int SURFACES_TILT_PORT = firstTilt(false, 2) + 1;
 
-// The tilts follow the surfaces, so their index counts the declared ones:
-// two for setSurfaces(), one for the single-aileron configurations
-static constexpr int SURFACES_TILT_STARBOARD = SURFACE_FIRST + 2;
-static constexpr int SURFACES_TILT_PORT = SURFACE_FIRST + 3;
-static constexpr int AILERON_TILT_STARBOARD = SURFACE_FIRST + 1;
-static constexpr int AILERON_TILT_PORT = SURFACE_FIRST + 2;
+// setAileron() declares one surface
+static constexpr int AILERON_TILT_STARBOARD = firstTilt(false, 1);
+static constexpr int AILERON_TILT_PORT = firstTilt(false, 1) + 1;
 
 // Collective grouping registers a single tilt servo
-static constexpr int COLLECTIVE_TILT = 2;
-static constexpr int TAIL_COLLECTIVE_TILT = 3;
-static constexpr int TAIL_COLLECTIVE_RUDDER = 4;
+static constexpr int COLLECTIVE_TILT = firstTilt(false, 0);
+static constexpr int TAIL_COLLECTIVE_TILT = firstTilt(true, 0);
+static constexpr int TAIL_COLLECTIVE_RUDDER = firstSurface(true) + 1;
 
 // The allocator's dt ceiling: the largest step it hands the effectiveness [s]
 static constexpr float kDt = 0.02f;
@@ -124,6 +131,16 @@ static void setCollectiveMode()
 	param_set(param_find("CA_AIRSHIP_GRP"), &grouping);
 }
 
+static void setAileron()	// one roll surface, unit effectiveness
+{
+	int32_t surface_count = 1;
+	param_set(param_find("CA_SV_CS_COUNT"), &surface_count);
+	int32_t aileron = 1;
+	param_set(param_find("CA_SV_CS0_TYPE"), &aileron);
+	float roll_torque = 1.f;
+	param_set(param_find("CA_SV_CS0_TRQ_R"), &roll_torque);
+}
+
 static void setSurfaces()
 {
 	int32_t surface_count = 2;
@@ -147,30 +164,41 @@ struct ScopedDisarm {
 
 // The actuator layout is decided when the actuators are declared, so every
 // updateSetpoint() needs a preceding declaration, as in the allocator
-static void declareActuators(ActuatorEffectivenessAirship &airship)
+static ActuatorEffectiveness::Configuration declareActuators(ActuatorEffectivenessAirship &airship)
 {
 	ActuatorEffectiveness::Configuration configuration{};
 	airship.getEffectivenessMatrix(configuration, EffectivenessUpdateReason::CONFIGURATION_UPDATE);
+	return configuration;
 }
 
 static void runUpdateSetpoint(ActuatorEffectivenessAirship &airship, const Vector<float, 6> &control_sp,
 			      ActuatorEffectiveness::ActuatorVector &actuator_sp)
 {
-	declareActuators(airship);
+	const ActuatorEffectiveness::Configuration configuration = declareActuators(airship);
 
 	// Production limits: motors are non-reversible (no CA_R_REV) at
 	// [0, 1], servos span the full [-1, 1]
-	int32_t tail = 0;
-	param_get(param_find("CA_AIRSHIP_TAIL"), &tail);
 	ActuatorEffectiveness::ActuatorVector actuator_min{};
 	actuator_min.setAll(-1.f);
 
-	for (int i = 0; i < (tail ? 3 : 2); i++) {
+	for (int i = 0; i < configuration.num_actuators[(int)ActuatorType::MOTORS]; i++) {
 		actuator_min(i) = 0.f;
 	}
 
 	ActuatorEffectiveness::ActuatorVector actuator_max{};
 	actuator_max.setAll(1.f);
+	airship.allocateAuxilaryControls(kDt, 0, actuator_sp);
+	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
+}
+
+// One allocator step with explicit output limits, for the cases that need
+// something other than the production [0, 1] motors / [-1, 1] servos
+static void runUpdateSetpoint(ActuatorEffectivenessAirship &airship, const Vector<float, 6> &control_sp,
+			      ActuatorEffectiveness::ActuatorVector &actuator_sp,
+			      const ActuatorEffectiveness::ActuatorVector &actuator_min,
+			      const ActuatorEffectiveness::ActuatorVector &actuator_max)
+{
+	declareActuators(airship);
 	airship.allocateAuxilaryControls(kDt, 0, actuator_sp);
 	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
 }
@@ -589,7 +617,7 @@ TEST(ActuatorEffectivenessAirshipTest, MotorLimitRespected)
 	actuator_max.setAll(1.f);
 	actuator_max(MOTOR_STARBOARD) = 0.8f;
 	actuator_max(MOTOR_PORT) = 0.8f;
-	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
+	runUpdateSetpoint(airship, control_sp, actuator_sp, actuator_min, actuator_max);
 
 	// The configured motor limit caps the couple; the shortfall is reported
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.8f);
@@ -731,7 +759,7 @@ TEST(ActuatorEffectivenessAirshipTest, TailReverseNeedsConfiguration)
 	actuator_min(MOTOR_TAIL) = -1.f;
 	ActuatorEffectiveness::ActuatorVector actuator_max{};
 	actuator_max.setAll(1.f);
-	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
+	runUpdateSetpoint(airship, control_sp, actuator_sp, actuator_min, actuator_max);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_TAIL), -1.f);
 
 	airship.getUnallocatedControl(0, status);
@@ -799,7 +827,7 @@ TEST(ActuatorEffectivenessAirshipTest, AsymmetricTiltRange)
 	Vector<float, 6> control_sp{};
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = 0.5f;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
-	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
+	runUpdateSetpoint(airship, control_sp, actuator_sp, actuator_min, actuator_max);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.5f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.5f);
 	EXPECT_FLOAT_EQ(actuator_sp(TAIL_COLLECTIVE_TILT), -1.f);
@@ -809,7 +837,7 @@ TEST(ActuatorEffectivenessAirshipTest, AsymmetricTiltRange)
 	// the shortfall is reported
 	control_sp.setZero();
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = 1.f;
-	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
+	runUpdateSetpoint(airship, control_sp, actuator_sp, actuator_min, actuator_max);
 	EXPECT_FLOAT_EQ(actuator_sp(TAIL_COLLECTIVE_TILT), -1.f);
 	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 0.f, 1e-6f);
 	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.f, 1e-6f);
@@ -822,7 +850,7 @@ TEST(ActuatorEffectivenessAirshipTest, AsymmetricTiltRange)
 	// Climb: +90 deg is the range maximum, so the tilt servo sits at +1
 	control_sp.setZero();
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = -1.f;
-	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
+	runUpdateSetpoint(airship, control_sp, actuator_sp, actuator_min, actuator_max);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 1.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 1.f);
 	EXPECT_FLOAT_EQ(actuator_sp(TAIL_COLLECTIVE_TILT), 1.f);
@@ -831,7 +859,7 @@ TEST(ActuatorEffectivenessAirshipTest, AsymmetricTiltRange)
 	// demand has no feasible component, and the shortfall is reported
 	control_sp.setZero();
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
-	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
+	runUpdateSetpoint(airship, control_sp, actuator_sp, actuator_min, actuator_max);
 	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 0.f, 1e-6f);
 	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.f, 1e-6f);
 	EXPECT_NEAR(actuator_sp(MOTOR_TAIL), 0.f, 1e-6f);
@@ -893,6 +921,45 @@ TEST(ActuatorEffectivenessAirshipTest, UnrealizableDemandDoesNotSweepTheTiltToAn
 	EXPECT_NEAR(actuator_sp(COLLECTIVE_TILT), 1.f / 3.f, 1e-6f);
 	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 0.f, 1e-6f);
 	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.f, 1e-6f);
+}
+
+// The constants above model the declared layout; check the model against the
+// layout the effectiveness really declares, in every shape the suite uses
+static void expectDeclaredLayout(bool tail, int num_surfaces, int num_tilts)
+{
+	ActuatorEffectivenessAirship airship(nullptr);
+	const ActuatorEffectiveness::Configuration configuration = declareActuators(airship);
+	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::MOTORS], numMotors(tail));
+	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::SERVOS], num_surfaces + num_tilts);
+	EXPECT_EQ(configuration.num_actuators_matrix[0], firstTilt(tail, num_surfaces) + num_tilts);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, DeclaredLayoutMatchesTheIndexMap)
+{
+	resetAirshipParams();
+	expectDeclaredLayout(false, 0, 2);
+
+	resetAirshipParams();
+	setTailThruster();
+	expectDeclaredLayout(true, 0, 2);
+
+	resetAirshipParams();
+	setSurfaces();
+	expectDeclaredLayout(false, 2, 2);
+
+	resetAirshipParams();
+	setAileron();
+	expectDeclaredLayout(false, 1, 2);
+
+	resetAirshipParams();
+	setCollectiveMode();
+	expectDeclaredLayout(false, 0, 1);
+
+	resetAirshipParams();
+	setCollectiveMode();
+	setTailThruster();
+	setSurfaces();
+	expectDeclaredLayout(true, 2, 1);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, SurfaceIndicesDoNotMoveWithTheTiltCount)
@@ -973,12 +1040,7 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceCreditScalesPodShare)
 TEST(ActuatorEffectivenessAirshipTest, RollSurfaceCreditedAgainstDifferentialRoll)
 {
 	resetAirshipParams();
-	int32_t surface_count = 1;
-	param_set(param_find("CA_SV_CS_COUNT"), &surface_count);
-	int32_t aileron = 1;
-	param_set(param_find("CA_SV_CS0_TYPE"), &aileron);
-	float roll_torque = 1.f;
-	param_set(param_find("CA_SV_CS0_TRQ_R"), &roll_torque);
+	setAileron();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	// The aileron carries 0.6 of the roll demand from the matrix pass;
@@ -1035,12 +1097,7 @@ TEST(ActuatorEffectivenessAirshipTest, RollSteerBandShortfallIsNotSaturation)
 TEST(ActuatorEffectivenessAirshipTest, RollSurfaceServedBandShortfallIsNotSaturation)
 {
 	resetAirshipParams();
-	int32_t surface_count = 1;
-	param_set(param_find("CA_SV_CS_COUNT"), &surface_count);
-	int32_t aileron = 1;
-	param_set(param_find("CA_SV_CS0_TYPE"), &aileron);
-	float roll_torque = 1.f;
-	param_set(param_find("CA_SV_CS0_TRQ_R"), &roll_torque);
+	setAileron();
 	setSurfaceCredit(0.5f);
 	ActuatorEffectivenessAirship airship(nullptr);
 
@@ -1325,7 +1382,7 @@ TEST(ActuatorEffectivenessAirshipTest, TiltServoLimitBoundsProjection)
 	Vector<float, 6> control_sp{};
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
-	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
+	runUpdateSetpoint(airship, control_sp, actuator_sp, actuator_min, actuator_max);
 
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 0.5f);
 	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 0.f, 1e-6f);
@@ -1517,7 +1574,7 @@ TEST(ActuatorEffectivenessAirshipTest, CollectiveClampedServoRealizedCopy)
 	Vector<float, 6> control_sp{};
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
-	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
+	runUpdateSetpoint(airship, control_sp, actuator_sp, actuator_min, actuator_max);
 
 	EXPECT_FLOAT_EQ(actuator_sp(COLLECTIVE_TILT), 0.5f);
 	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 0.f, 1e-6f);
