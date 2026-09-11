@@ -101,12 +101,19 @@ private:
 	 * Remove from a shortfall the share a pod withheld by choice (see
 	 * AirshipPod::heldByChoice): reported as saturation it would freeze the
 	 * rate integrator against the small steady torques the integral exists
-	 * to remove. Only a same-signed share is removed.
+	 * to remove. Only a same-signed share is removed, because the two pods
+	 * can withhold and fall short in opposite directions -- one holding in
+	 * the steer band while the other is floored by the non-reversible clamp.
+	 * Subtracting the whole share would then flip the published sign and
+	 * drive the integrator the wrong way.
 	 */
 	static float discountHeld(float shortfall, float held);
 
 	/** +1, -1 or 0: the direction of a shortfall, as the rate controller reads it */
 	static float saturationSign(float shortfall);
+
+	/** What an axis was asked for, less what the pods and the tail delivered, less the share they withheld by choice */
+	float shortfall(float asked, int axis) const;
 
 	AirshipPod _pods[NUM_PODS] {};
 	bool _armed{false};		///< the tilts park until vehicle_status reports armed
@@ -126,10 +133,12 @@ private:
 	int _num_tilt_servos{0};
 	bool _surface_serves[3] {};	///< torque axes with control-surface effectiveness
 
+	// What updateSetpoint() leaves for getUnallocatedControl(): the raw
+	// quantities, so the subtraction happens once, where it is published
 	matrix::Vector3f _surface_torque{};	///< torque the clipped, trim-relative surface deflections deliver
-	matrix::Vector3f _achieved_torque{};	///< torque the pods and tail delivered
-	matrix::Vector3f _held_torque{};	///< torque the pods withhold by choice (AirshipPod::heldByChoice)
-	matrix::Vector<float, NUM_AXES> _unallocated_control{};	///< shortfall per axis less the held share
+	matrix::Vector<float, NUM_AXES> _demand{};	///< what the pods and the tail were asked for: control_sp less the credited surface torque
+	matrix::Vector<float, NUM_AXES> _achieved{};	///< what the pods and the tail delivered
+	matrix::Vector<float, NUM_AXES> _held{};	///< what the pods withhold by choice (AirshipPod::heldByChoice)
 
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::CA_AIRSHIP_TLMIN>) _param_ca_airship_tlmin,
