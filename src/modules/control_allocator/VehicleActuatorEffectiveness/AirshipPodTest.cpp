@@ -185,8 +185,11 @@ TEST(AirshipPodTest, DriveProjectsOntoTheRealizedAxisAndNeverReverses)
 	EXPECT_FLOAT_EQ(up.achieved(1), 0.8f);
 	EXPECT_NEAR(up.withheld(1), 0.f, 1e-6f);		// steering: nothing withheld by choice
 
-	// A demand behind the axis cannot be pushed: the propeller does not reverse
+	// A demand behind the axis cannot be pushed, and a CA_R_REV bit on a pod
+	// motor does not buy reverse either: the propeller reverses only by tilting
 	EXPECT_FLOAT_EQ(full.drive(force(0.f, -0.5f), 0.f, 1.f).thrust, 0.f);
+	EXPECT_FLOAT_EQ(full.drive(force(0.f, -0.5f), -1.f, 1.f).thrust, 0.f);
+	EXPECT_FLOAT_EQ(pod(0.f, 0.f).drive(force(-1.f, 0.f), -1.f, 1.f).thrust, 0.f);
 
 	// Held by choice: the whole residual, clamp shortfall included, is withheld
 	full.steer(force(0.f, 0.015f), kDt);
@@ -195,6 +198,32 @@ TEST(AirshipPodTest, DriveProjectsOntoTheRealizedAxisAndNeverReverses)
 	EXPECT_NEAR(held.thrust, 0.f, 1e-6f);
 	EXPECT_FLOAT_EQ(held.withheld(0), -0.01f);
 	EXPECT_NEAR(held.withheld(1), 0.f, 1e-6f);
+}
+
+TEST(AirshipPodTest, AsymmetricRangeDoesNotSweepForLessThrust)
+{
+	// An asymmetric range wider than half a turn. The pod commits to the high
+	// end, then a straight-back demand puts the rear cone's pick at the other
+	// end, half a turn away. The seam check has to score that end by what it
+	// realizes: the demand's own magnitude is not what a range end delivers
+	AirshipPod pod_a = pod(-100.f, 99.f, 120.f);
+
+	for (int i = 0; i < 8000; i++) {
+		pod_a.steer(force(-0.2f, 1.f), kDt);		// out of range past the high end
+	}
+
+	EXPECT_NEAR(pod_a.tilt(), math::radians(99.f), 1e-5f);
+
+	const Vector2f rear = force(-1.f, 0.03f);		// inside the rear cone
+	const float at_high = rear.dot(Vector2f{cosf(math::radians(99.f)), sinf(math::radians(99.f))});
+	const float at_low = rear.dot(Vector2f{cosf(math::radians(-100.f)), sinf(math::radians(-100.f))});
+	EXPECT_GT(at_high, at_low);				// the committed end is the better one
+
+	for (int i = 0; i < 8000; i++) {
+		pod_a.steer(rear, kDt);
+	}
+
+	EXPECT_NEAR(pod_a.tilt(), math::radians(99.f), 1e-5f);	// it stands rather than sweep for less
 }
 
 TEST(AirshipPodTest, SeamCrossingNeedsToBeWorthTheSweep)

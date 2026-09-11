@@ -155,8 +155,12 @@ float AirshipPod::steerTarget(const Vector2f &demand, const float magnitude) con
 	// full turn no target is ever that far, so this is the seam's own switch
 	if (fabsf(tilt - _tilt_target) > M_PI_F) {
 		const Vector2f committed{cosf(_tilt_target), sinf(_tilt_target)};
+		const Vector2f target{cosf(tilt), sinf(tilt)};
 
-		if (magnitude <= demand.dot(committed) + switch_margin) {
+		// Score both by what they realize, as the end switch above: the target
+		// is the demand direction only on the in-range branch, and a committed
+		// end pointing away gives up nothing, so floor it
+		if (demand.dot(target) <= fmaxf(0.f, demand.dot(committed)) + switch_margin) {
 			tilt = _tilt_target;
 		}
 	}
