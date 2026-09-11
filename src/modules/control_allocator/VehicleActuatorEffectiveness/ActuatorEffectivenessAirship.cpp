@@ -273,11 +273,11 @@ ActuatorEffectivenessAirship::shortfall(const float asked, const int axis) const
 float
 ActuatorEffectivenessAirship::saturationSign(float shortfall)
 {
-	if (shortfall > FLT_EPSILON) {
+	if (shortfall > kShortfallDeadband) {
 		return 1.f;
 	}
 
-	if (shortfall < -FLT_EPSILON) {
+	if (shortfall < -kShortfallDeadband) {
 		return -1.f;
 	}
 

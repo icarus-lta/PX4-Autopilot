@@ -962,6 +962,36 @@ TEST(ActuatorEffectivenessAirshipTest, DeclaredLayoutMatchesTheIndexMap)
 	expectDeclaredLayout(true, 2, 1);
 }
 
+TEST(ActuatorEffectivenessAirshipTest, SettledPodsDoNotReportRoundingAsSaturation)
+{
+	// Both pods settled on a reachable demand and delivering it: the residual
+	// is the rounding of atan2/cos/sin and the servo round trip, and must not
+	// be published as saturation, which would stop the yaw integrator
+	resetAirshipParams();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = 0.05f;
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = -0.60f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+
+	for (int i = 0; i < 400; i++) {	// let both tilts settle
+		runUpdateSetpoint(airship, control_sp, actuator_sp);
+	}
+
+	for (const float yaw_sp : {0.0026f, 0.0031f, 0.0064f, 0.05f}) {
+		control_sp(ActuatorEffectiveness::ControlAxis::YAW) = yaw_sp;
+
+		for (int i = 0; i < 400; i++) {
+			runUpdateSetpoint(airship, control_sp, actuator_sp);
+		}
+
+		control_allocator_status_s status{};
+		airship.getUnallocatedControl(0, status);
+		EXPECT_FLOAT_EQ(status.unallocated_torque[2], 0.f) << "yaw setpoint " << (double)yaw_sp;
+	}
+}
+
 TEST(ActuatorEffectivenessAirshipTest, SurfaceIndicesDoNotMoveWithTheTiltCount)
 {
 	// The tilt count follows the tilt range, which the ground station's

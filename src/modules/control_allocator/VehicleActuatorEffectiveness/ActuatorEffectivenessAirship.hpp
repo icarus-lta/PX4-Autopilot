@@ -122,6 +122,18 @@ private:
 	 */
 	static float discountHeld(float shortfall, float held);
 
+	/*
+	 * A shortfall this small is rounding, not saturation. The pods' achieved
+	 * wrench comes through atan2f, cosf/sinf and the servo round trip, which
+	 * carry a few ulps; publishing a sign quantizes that to 1 before the
+	 * allocator's own achieved gate (norm_squared < 1e-6) can absorb it, and
+	 * the rate controller would then stop integrating against exactly the
+	 * small steady torques the integral exists to remove. Three orders above
+	 * the measured noise and an order below the smallest real shortfall the
+	 * tests assert. [normalized torque or thrust]
+	 */
+	static constexpr float kShortfallDeadband = 1e-4f;
+
 	/** +1, -1 or 0: the direction of a shortfall, as the rate controller reads it */
 	static float saturationSign(float shortfall);
 
