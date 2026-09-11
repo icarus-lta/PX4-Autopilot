@@ -645,9 +645,11 @@ parameters:
                 short: Airship tail yaw thruster
                 long: |
                   Add a tail yaw thruster as motor 3. It serves the yaw
-                  demand that the pods and control surfaces leave unmet;
-                  configure it as reversible for yaw authority in both
-                  directions.
+                  demand that the pods and control surfaces leave unmet, one
+                  unit of motor command per unit of normalized yaw torque
+                  (there is no moment-arm parameter). Configure it as
+                  reversible with CA_R_REV for yaw authority in both
+                  directions; without that it can only push one way.
             type: boolean
             default: 0
 
