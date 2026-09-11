@@ -98,6 +98,11 @@ ActuatorEffectivenessAirship::getEffectivenessMatrix(Configuration &configuratio
 		configuration.addActuator(ActuatorType::SERVOS, Vector3f{}, Vector3f{});
 	}
 
+	// Any non-zero entry counts as served here, while the allocator zeroes a
+	// matrix row whose every entry is weak: a surface below that leaves a
+	// residual with no surface term, so the uncredited share added back in
+	// getUnallocatedControl() is off by that torque -- on the reported
+	// magnitude only, never on an actuator output
 	for (int axis = 0; axis < 3; axis++) {
 		_surface_serves[axis] = false;
 
@@ -128,7 +133,10 @@ ActuatorEffectivenessAirship::surfaceTorque(const ActuatorVector &actuator_sp, c
 	// The allocator credits effectiveness * (setpoint - trim) after clipping,
 	// but this runs before clipActuatorSetpoint(): clip and trim locally so a
 	// saturated or trimmed surface is not credited torque it cannot deliver.
-	// A CA_SVn_SLEW on a surface runs later and stays invisible.
+	// A CA_SVn_SLEW runs after this model, so it is invisible here; the
+	// allocator's residual is rebuilt from the final setpoint and does see it.
+	// At the default CA_AIRSHIP_CS_K = 1 the two snapshots cancel; below it,
+	// (1 - K) of one slew step of lag stays in the reported shortfall.
 	Vector3f torque{};
 
 	for (int i = 0; i < _control_surfaces.count(); i++) {
@@ -159,14 +167,14 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		int matrix_index, ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
 		const ActuatorVector &actuator_max)
 {
-	_surface_torque = surfaceTorque(actuator_sp, actuator_min, actuator_max);
+	const Vector3f surface_torque = surfaceTorque(actuator_sp, actuator_min, actuator_max);
 	const float credit = _param_ca_airship_cs_k.get();
 
 	// The pods and the tail serve what the credited surfaces leave
 	Vector<float, NUM_AXES> demand = control_sp;
 
 	for (int axis = 0; axis < 3; axis++) {
-		demand(axis) -= credit * _surface_torque(axis);
+		demand(axis) -= credit * surface_torque(axis);
 	}
 
 	const Vector2f common{demand(ControlAxis::THRUST_X), -demand(ControlAxis::THRUST_Z)};
@@ -212,14 +220,12 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 		achieved_wrench(ControlAxis::YAW) += actuator_sp(TAIL);
 	}
 
-	const Vector<float, NUM_AXES> held_wrench = podWrench(held[STARBOARD], held[PORT]);
-
-	for (int axis = 0; axis < NUM_AXES; axis++) {
-		_unallocated_control(axis) = discountHeld(demand(axis) - achieved_wrench(axis), held_wrench(axis));
-	}
-
-	_achieved_torque = achieved_wrench.slice<3, 1>(0, 0);
-	_held_torque = held_wrench.slice<3, 1>(0, 0);
+	// Keep the raw quantities: getUnallocatedControl() does the subtraction,
+	// once, when the status is published
+	_surface_torque = surface_torque;
+	_demand = demand;
+	_achieved = achieved_wrench;
+	_held = podWrench(held[STARBOARD], held[PORT]);
 }
 
 void
@@ -257,6 +263,12 @@ ActuatorEffectivenessAirship::discountHeld(float shortfall, float held)
 }
 
 float
+ActuatorEffectivenessAirship::shortfall(const float asked, const int axis) const
+{
+	return discountHeld(asked - _achieved(axis), _held(axis));
+}
+
+float
 ActuatorEffectivenessAirship::saturationSign(float shortfall)
 {
 	if (shortfall > FLT_EPSILON) {
@@ -274,23 +286,28 @@ void
 ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_allocator_status_s &status)
 {
 	// The rate controller gates on torque_setpoint_achieved, then reads only
-	// the sign of each axis. Torque axes a control surface serves keep the
-	// matrix residual: it credits the surface in full, so add back the share
-	// CA_AIRSHIP_CS_K left uncredited (the pods were asked to serve it),
-	// subtract what the pods and tail achieved and discount the held share.
-	// The other axes report a sign only.
+	// the sign of each axis. Both branches publish the same quantity -- what
+	// the pods and the tail were asked for, less what they delivered, less the
+	// share they held by choice -- and differ only in where the asked-for
+	// share comes from. On a torque axis a control surface serves it is the
+	// allocator's own residual: that credits the surface in full, so add back
+	// the share CA_AIRSHIP_CS_K left uncredited, and it is rebuilt from the
+	// final actuator setpoint, so it also carries a CA_SVn_SLEW that moved the
+	// surface after this model ran. Those axes publish the magnitude; every
+	// other axis has no surface to disagree about and publishes a sign, as
+	// ActuatorEffectivenessHelicopter does on all of them
 	const float uncredited = 1.f - _param_ca_airship_cs_k.get();
 
 	for (int axis = 0; axis < 3; axis++) {
 		if (_surface_serves[axis]) {
-			status.unallocated_torque[axis] = discountHeld(status.unallocated_torque[axis]
-							  + uncredited * _surface_torque(axis) - _achieved_torque(axis),
-							  _held_torque(axis));
+			status.unallocated_torque[axis] = shortfall(status.unallocated_torque[axis]
+							  + uncredited * _surface_torque(axis), axis);
 
 		} else {
-			status.unallocated_torque[axis] = saturationSign(_unallocated_control(axis));
+			status.unallocated_torque[axis] = saturationSign(shortfall(_demand(axis), axis));
 		}
 
-		status.unallocated_thrust[axis] = saturationSign(_unallocated_control(ControlAxis::THRUST_X + axis));
+		const int thrust_axis = ControlAxis::THRUST_X + axis;
+		status.unallocated_thrust[axis] = saturationSign(shortfall(_demand(thrust_axis), thrust_axis));
 	}
 }
