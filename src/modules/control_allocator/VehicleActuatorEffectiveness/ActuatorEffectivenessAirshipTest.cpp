@@ -870,6 +870,31 @@ TEST(ActuatorEffectivenessAirshipTest, SurfaceConfiguration)
 	EXPECT_FLOAT_EQ(configuration.effectiveness_matrices[0](2, SURFACE_RUDDER), 1.f);
 }
 
+TEST(ActuatorEffectivenessAirshipTest, UnrealizableDemandDoesNotSweepTheTiltToAnEnd)
+{
+	// An up-only pod asked to push back and down cannot realize any of it at
+	// either end of its range, so the servo stands instead of sweeping
+	resetAirshipParams(0.f, 90.f);
+	setCollectiveMode();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// Commit the tilt to 60 deg: servo -1 + 2 * 60 / 90
+	Vector<float, 6> control_sp{};
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = cosf(math::radians(60.f));
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = -sinf(math::radians(60.f));
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_NEAR(actuator_sp(COLLECTIVE_TILT), 1.f / 3.f, 1e-6f);
+
+	control_sp.setZero();
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_X) = -0.5f;
+	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = 0.5f;
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
+	EXPECT_NEAR(actuator_sp(COLLECTIVE_TILT), 1.f / 3.f, 1e-6f);
+	EXPECT_NEAR(actuator_sp(MOTOR_STARBOARD), 0.f, 1e-6f);
+	EXPECT_NEAR(actuator_sp(MOTOR_PORT), 0.f, 1e-6f);
+}
+
 TEST(ActuatorEffectivenessAirshipTest, SurfaceIndicesDoNotMoveWithTheTiltCount)
 {
 	// The tilt count follows the tilt range, which the ground station's

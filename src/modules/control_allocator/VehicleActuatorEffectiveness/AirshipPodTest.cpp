@@ -174,6 +174,20 @@ TEST(AirshipPodTest, NoBackwardEndHoldsTheTilt)
 	EXPECT_FLOAT_EQ(symmetric.tilt(), math::radians(30.f));
 }
 
+TEST(AirshipPodTest, UnrealizableOutOfRangeDemandHoldsTheTilt)
+{
+	// Up-only range: a back-and-down demand is out of range and realizes
+	// nothing at either end, so the tilt stays instead of sweeping a full
+	// servo travel for zero thrust (as NoBackwardEndHoldsTheTilt)
+	AirshipPod up_only = pod(0.f, 90.f);
+	up_only.steer(force(cosf(math::radians(60.f)), sinf(math::radians(60.f))), kDt);
+	EXPECT_FLOAT_EQ(up_only.tilt(), math::radians(60.f));
+
+	up_only.steer(force(-0.5f, -0.5f), kDt);
+	EXPECT_FLOAT_EQ(up_only.tilt(), math::radians(60.f));
+	EXPECT_FALSE(up_only.heldByChoice());	// steering: the shortfall is real and reported
+}
+
 TEST(AirshipPodTest, OutOfRangeDemandSwitchesEndsOnlyPastTheMargin)
 {
 	// Down-only range, level: straight up is unreachable at either end
