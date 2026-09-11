@@ -162,6 +162,21 @@ void AirshipPod::setServoSetpoint(const float servo_sp)
 	_tilt.setForcedValue(_tilt_min + (servo_sp + 1.f) * 0.5f * (_tilt_max - _tilt_min));
 }
 
+AirshipPod::Drive AirshipPod::drive(const Vector2f &demand, const float out_min, const float out_max) const
+{
+	const Vector2f axis = thrustAxis();
+	Drive drive{};
+	// non-reversible propeller: reverse only by tilting, the CA_R_REV pod bits are not honored
+	drive.thrust = math::constrain(demand.dot(axis), math::max(out_min, 0.f), out_max);
+	drive.achieved = axis * drive.thrust;
+
+	if (heldByChoice()) {
+		drive.withheld = demand - drive.achieved;
+	}
+
+	return drive;
+}
+
 bool AirshipPod::heldByChoice() const
 {
 	// A fixed mount withholds nothing by choice

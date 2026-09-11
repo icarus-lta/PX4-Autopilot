@@ -73,7 +73,12 @@ public:
 			    ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
 			    const ActuatorVector &actuator_max) override;
 
-	/** No auxiliary controls: takes the allocator's cycle time for the tilt slew in updateSetpoint() */
+	/**
+	 * No auxiliary controls: takes the allocator's cycle time for the tilt slew
+	 * in updateSetpoint(). Because the flaps/spoiler path is not called, a
+	 * CA_SV_CSn_TYPE of flap or spoiler is inert on an airship: the surface
+	 * still occupies its slot and is still credited whatever the matrix left.
+	 */
 	void allocateAuxilaryControls(const float dt, int matrix_index, ActuatorVector &actuator_sp) override { _dt = dt; }
 
 	void getUnallocatedControl(int matrix_index, control_allocator_status_s &status) override;
@@ -90,7 +95,15 @@ private:
 	matrix::Vector3f surfaceTorque(const ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
 				       const ActuatorVector &actuator_max) const;
 
-	/** Body wrench of a pod force pair: the mean is thrust (x forward, z down), half the difference the roll/yaw couple */
+	/**
+	 * Body wrench of a pod force pair: the mean is thrust (x forward, z down),
+	 * half the difference the roll/yaw couple.
+	 *
+	 * The left inverse of the demand split in updateSetpoint() on the four axes
+	 * the pods serve: podWrench() of that split reproduces ROLL, YAW, THRUST_X
+	 * and THRUST_Z exactly. The sign flips are the pod frame (forward, up)
+	 * against the body frame (x forward, z down).
+	 */
 	static matrix::Vector<float, NUM_AXES> podWrench(const matrix::Vector2f &starboard, const matrix::Vector2f &port);
 
 	/** Write the tilt servos and read the clamped angles back; the collective servo drives both pods */

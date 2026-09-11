@@ -174,6 +174,29 @@ TEST(AirshipPodTest, NoBackwardEndHoldsTheTilt)
 	EXPECT_FLOAT_EQ(symmetric.tilt(), math::radians(30.f));
 }
 
+TEST(AirshipPodTest, DriveProjectsOntoTheRealizedAxisAndNeverReverses)
+{
+	AirshipPod full = pod(-180.f, 180.f);
+	full.steer(force(0.f, 1.f), kDt);			// +90 deg: thrust up
+
+	const AirshipPod::Drive up = full.drive(force(0.6f, 0.8f), 0.f, 1.f);
+	EXPECT_FLOAT_EQ(up.thrust, 0.8f);			// only the component along the axis
+	EXPECT_NEAR(up.achieved(0), 0.f, 1e-6f);
+	EXPECT_FLOAT_EQ(up.achieved(1), 0.8f);
+	EXPECT_NEAR(up.withheld(1), 0.f, 1e-6f);		// steering: nothing withheld by choice
+
+	// A demand behind the axis cannot be pushed: the propeller does not reverse
+	EXPECT_FLOAT_EQ(full.drive(force(0.f, -0.5f), 0.f, 1.f).thrust, 0.f);
+
+	// Held by choice: the whole residual, clamp shortfall included, is withheld
+	full.steer(force(0.f, 0.015f), kDt);
+	ASSERT_TRUE(full.heldByChoice());
+	const AirshipPod::Drive held = full.drive(force(-0.01f, 0.f), 0.f, 1.f);
+	EXPECT_NEAR(held.thrust, 0.f, 1e-6f);
+	EXPECT_FLOAT_EQ(held.withheld(0), -0.01f);
+	EXPECT_NEAR(held.withheld(1), 0.f, 1e-6f);
+}
+
 TEST(AirshipPodTest, UnrealizableOutOfRangeDemandHoldsTheTilt)
 {
 	// Up-only range: a back-and-down demand is out of range and realizes
