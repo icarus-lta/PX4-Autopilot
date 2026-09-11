@@ -81,8 +81,22 @@ public:
 	/** Read a clamped servo output back into the realized tilt; valid only while canTilt() */
 	void setServoSetpoint(float servo_sp);
 
-	/** Unit vector (forward, up) the propeller thrusts along at the realized tilt */
-	matrix::Vector2f thrustAxis() const { return matrix::Vector2f{cosf(tilt()), sinf(tilt())}; }
+	/** What the pod does with a force demand (forward, up) at the tilt it has actually realized */
+	struct Drive {
+		float thrust;			///< motor command along the realized axis, never negative
+		matrix::Vector2f achieved;	///< force delivered (forward, up)
+		matrix::Vector2f withheld;	///< the whole residual the pod withholds by choice, clamp shortfall included
+	};
+
+	/**
+	 * Project a force demand onto the axis the tilt has actually reached.
+	 *
+	 * Call after the tilt servo is written, so the axis is the angle the servo
+	 * realizes rather than the one that was asked for.
+	 * @param out_min, out_max motor output limits; a negative minimum is not
+	 *        honored, because the propeller does not reverse
+	 */
+	Drive drive(const matrix::Vector2f &demand, float out_min, float out_max) const;
 
 	/**
 	 * Steered below the engage floor (holding or released) and settled at its
@@ -92,9 +106,15 @@ public:
 	bool heldByChoice() const;
 
 private:
+	/** Unit vector (forward, up) the propeller thrusts along at the realized tilt */
+	matrix::Vector2f thrustAxis() const { return matrix::Vector2f{cosf(tilt()), sinf(tilt())}; }
+
 	static constexpr float kMinTiltSpan = 1e-3f;		///< below this range the pod is a fixed mount [rad]
 	static constexpr float kTiltSettledTolerance = 1e-3f;	///< the tilt counts as at its target [rad]
 
+	// Two independent facts in one value: whether the steer band is latched
+	// (read in steer()) and whether this cycle's shortfall is by choice (read
+	// in heldByChoice()). All four combinations occur; none is spare
 	enum class TiltMode : uint8_t {
 		Parked,		///< as close to level as the range allows
 		Steering,	///< demand above the engage floor: the target follows its direction

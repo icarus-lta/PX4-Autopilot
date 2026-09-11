@@ -198,23 +198,24 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	Vector2f achieved[NUM_PODS] {};
 	Vector2f held[NUM_PODS] {};
 
+	// After writeTiltServos(), so each pod projects onto the angle its servo
+	// realizes. The motor block sits at a fixed offset by construction (the
+	// motors are declared first); everything behind it moves with the counts
+	// ahead of it, which is why the surface and tilt bases are read back from
+	// the configuration and these are not
 	for (int i = 0; i < NUM_PODS; i++) {
-		const Vector2f thrust_axis = _pods[i].thrustAxis();
-		const float thrust = pod_demand[i].dot(thrust_axis);
-
-		// non-reversible propellers: reverse only by tilting, the CA_R_REV pod bits are not honored
-		actuator_sp(i) = math::constrain(thrust, math::max(actuator_min(i), 0.f), actuator_max(i));
-		achieved[i] = thrust_axis * actuator_sp(i);
-
-		if (_pods[i].heldByChoice()) {
-			held[i] = pod_demand[i] - achieved[i];
-		}
+		const AirshipPod::Drive drive = _pods[i].drive(pod_demand[i], actuator_min(i), actuator_max(i));
+		actuator_sp(i) = drive.thrust;
+		achieved[i] = drive.achieved;
+		held[i] = drive.withheld;
 	}
 
 	Vector<float, NUM_AXES> achieved_wrench = podWrench(achieved[STARBOARD], achieved[PORT]);
 
 	if (_has_tail) {
-		// the tail serves the yaw the pods leave; reverse authority comes from CA_R_REV
+		// The tail serves the yaw the pods leave. One unit of motor command is
+		// taken as one unit of normalized yaw torque: there is no moment-arm
+		// parameter, and its reverse authority comes from CA_R_REV
 		actuator_sp(TAIL) = math::constrain(demand(ControlAxis::YAW) - achieved_wrench(ControlAxis::YAW),
 						    actuator_min(TAIL), actuator_max(TAIL));
 		achieved_wrench(ControlAxis::YAW) += actuator_sp(TAIL);
