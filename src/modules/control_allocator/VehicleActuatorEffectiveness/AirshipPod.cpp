@@ -89,6 +89,13 @@ void AirshipPod::slewToTarget(const float dt)
 
 float AirshipPod::steerTarget(const Vector2f &force, const float magnitude) const
 {
+	// Both branches below answer one question: bring the demand direction into
+	// the range, compare the candidate ends by what each realizes, hold when
+	// neither realizes anything, and switch only past the margin. They stay
+	// apart because the rear cone is a deadband as well as a branch cut:
+	// straight back, atan2 flips between +-180 deg on noise in the
+	// perpendicular component, so snapping to one end keeps the servo still
+	// where tracking the demand would dither
 	float tilt = atan2f(force(1), force(0));
 
 	// Switching ends costs a full sweep of an end-stop servo: ignore smaller
@@ -123,13 +130,22 @@ float AirshipPod::steerTarget(const Vector2f &force, const float magnitude) cons
 		// past the margin
 		const float p_hi = fmaxf(0.f, force(0) * cosf(_tilt_max) + force(1) * sinf(_tilt_max));
 		const float p_lo = fmaxf(0.f, force(0) * cosf(_tilt_min) + force(1) * sinf(_tilt_min));
-		const bool committed_hi = _tilt_target - _tilt_min > _tilt_max - _tilt_target;
 
-		if (committed_hi) {
-			tilt = p_lo > p_hi + switch_margin ? _tilt_min : _tilt_max;
+		if (fmaxf(p_hi, p_lo) <= FLT_EPSILON) {
+			// Neither end realizes any of the demand, and the projection peaks
+			// once on the circle, so no angle between them does either: a sweep
+			// would realize nothing, so the tilt stays
+			tilt = _tilt_target;
 
 		} else {
-			tilt = p_hi > p_lo + switch_margin ? _tilt_max : _tilt_min;
+			const bool committed_hi = _tilt_target - _tilt_min > _tilt_max - _tilt_target;
+
+			if (committed_hi) {
+				tilt = p_lo > p_hi + switch_margin ? _tilt_min : _tilt_max;
+
+			} else {
+				tilt = p_hi > p_lo + switch_margin ? _tilt_max : _tilt_min;
+			}
 		}
 	}
 
