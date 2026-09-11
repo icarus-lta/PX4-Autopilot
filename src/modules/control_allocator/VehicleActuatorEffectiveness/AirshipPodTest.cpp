@@ -200,6 +200,33 @@ TEST(AirshipPodTest, DriveProjectsOntoTheRealizedAxisAndNeverReverses)
 	EXPECT_NEAR(held.withheld(1), 0.f, 1e-6f);
 }
 
+TEST(AirshipPodTest, RearConePicksTheEndThatRealizesMore)
+{
+	// Straight back on an asymmetric range: both ends point backward, but the
+	// demand is only near straight back, so its perpendicular component decides
+	// which end is better. Ranking by how backward an end points gets it wrong
+	AirshipPod pod_a = pod(-100.f, 99.f, 120.f);
+	const Vector2f rear = force(-1.f, 0.03f);
+
+	for (int i = 0; i < 9000; i++) {
+		pod_a.steer(rear, kDt);
+	}
+
+	const float hi = math::radians(99.f);
+	const float lo = math::radians(-100.f);
+	EXPECT_GT(rear.dot(Vector2f{cosf(hi), sinf(hi)}), rear.dot(Vector2f{cosf(lo), sinf(lo)}));
+	EXPECT_NEAR(pod_a.tilt(), hi, 1e-5f);
+
+	// A symmetric range has both ends on one axis: the committed end stands
+	AirshipPod pod_s = pod(-180.f, 180.f, 120.f);
+
+	for (int i = 0; i < 9000; i++) {
+		pod_s.steer(rear, kDt);
+	}
+
+	EXPECT_NEAR(pod_s.tilt(), math::radians(180.f), 1e-5f);
+}
+
 TEST(AirshipPodTest, AsymmetricRangeDoesNotSweepForLessThrust)
 {
 	// An asymmetric range wider than half a turn. The pod commits to the high
