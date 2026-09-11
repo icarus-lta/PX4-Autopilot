@@ -91,8 +91,19 @@ inline float yawRateSetpoint(float stick, float deadzone, float max_rate)
 }
 
 /**
- * Whether the yaw rate loop closes on the stick: usable manual input (armed
- * with valid sticks, the caller's flag) in a manual mode with rate control
+ * Whether the pilot is in command: armed with valid manual input.
+ *
+ * The sticks stay live in every armed mode; lost or never-published input
+ * keeps its last values and only clears .valid, so it must read as released.
+ */
+inline bool manualInputUsable(const vehicle_control_mode_s &control_mode, const manual_control_setpoint_s &sticks)
+{
+	return control_mode.flag_armed && sticks.valid;
+}
+
+/**
+ * Whether the yaw rate loop closes on the stick: usable manual input
+ * (manualInputUsable() above, passed by the caller) in a manual mode with rate control
  * (Acro, Stabilized, Altitude, Position). Manual has rates off and the
  * non-manual modes have no setpoint source here yet; both keep the torque
  * passthrough. Disarmed or with the sticks lost the loop stays open, so it

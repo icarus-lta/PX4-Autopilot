@@ -122,6 +122,23 @@ TEST(AirshipManualInputTest, NonFiniteStickReadsAsReleased)
 	EXPECT_FLOAT_EQ(yawRateSetpoint(INFINITY, kDeadzone, kMaxRate), 0.f);
 }
 
+TEST(AirshipManualInputTest, ThePilotIsInCommandOnlyArmedWithValidSticks)
+{
+	vehicle_control_mode_s mode{};
+	manual_control_setpoint_s valid = sticks(0.f, 0.f, 0.f, 0.f);
+	valid.valid = true;
+
+	EXPECT_FALSE(manualInputUsable(mode, valid));	// disarmed
+
+	mode.flag_armed = true;
+	EXPECT_TRUE(manualInputUsable(mode, valid));
+
+	manual_control_setpoint_s lost = valid;
+	lost.valid = false;				// the link dropped: last values stand, .valid clears
+	EXPECT_FALSE(manualInputUsable(mode, lost));
+	EXPECT_FALSE(manualInputUsable(mode, manual_control_setpoint_s{}));	// boot: nothing published yet
+}
+
 TEST(AirshipManualInputTest, LoopClosesInManualRateModes)
 {
 	vehicle_control_mode_s mode{};
