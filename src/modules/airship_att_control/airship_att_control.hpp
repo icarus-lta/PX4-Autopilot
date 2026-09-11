@@ -109,9 +109,10 @@ private:
 	/** Integrator state for logging */
 	void publishRateControlStatus();
 
-	// The sticks stay live in every armed mode; lost or never-published input
-	// keeps its last values and only clears .valid, so it must read as released
-	bool manualInputUsable() const { return _vehicle_control_mode.flag_armed && _manual_control_setpoint.valid; }
+	bool manualInputUsable() const
+	{
+		return airship_manual_input::manualInputUsable(_vehicle_control_mode, _manual_control_setpoint);
+	}
 
 	RateControl _rate_control; ///< yaw axis only: roll and pitch gains stay zero
 
