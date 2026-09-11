@@ -46,14 +46,14 @@ void AirshipPod::setTiltRange(const float tilt_min, const float tilt_max)
 	_tilt_target = math::constrain(_tilt_target, _tilt_min, _tilt_max);
 }
 
-void AirshipPod::steer(const Vector2f &force, const float dt)
+void AirshipPod::steer(const Vector2f &demand, const float dt)
 {
-	const float magnitude = force.norm();
+	const float magnitude = demand.norm();
 	const bool engaged = _mode == TiltMode::Steering || _mode == TiltMode::Holding;
 
 	if (magnitude > kSteerEngage) {
 		_mode = TiltMode::Steering;
-		_tilt_target = steerTarget(force, magnitude);
+		_tilt_target = steerTarget(demand, magnitude);
 
 	} else if (engaged && magnitude > kSteerRelease) {
 		// Inside the band an engaged target stands
@@ -87,7 +87,7 @@ void AirshipPod::slewToTarget(const float dt)
 	}
 }
 
-float AirshipPod::steerTarget(const Vector2f &force, const float magnitude) const
+float AirshipPod::steerTarget(const Vector2f &demand, const float magnitude) const
 {
 	// Both branches below answer one question: bring the demand direction into
 	// the range, compare the candidate ends by what each realizes, hold when
@@ -96,13 +96,13 @@ float AirshipPod::steerTarget(const Vector2f &force, const float magnitude) cons
 	// straight back, atan2 flips between +-180 deg on noise in the
 	// perpendicular component, so snapping to one end keeps the servo still
 	// where tracking the demand would dither
-	float tilt = atan2f(force(1), force(0));
+	float tilt = atan2f(demand(1), demand(0));
 
 	// Switching ends costs a full sweep of an end-stop servo: ignore smaller
 	// advantages; the floor covers stick noise at low demand
 	const float switch_margin = fmaxf(kEndSwitchMargin * magnitude, kSteerRelease);
 
-	if (force(0) < 0.f && fabsf(force(1)) < switch_margin) {
+	if (demand(0) < 0.f && fabsf(demand(1)) < switch_margin) {
 		// Straight back, atan2 flips between +-180 deg on the sign of the
 		// perpendicular component: pick the range end that realizes the
 		// demand best, on a tie keep the committed end
@@ -128,8 +128,8 @@ float AirshipPod::steerTarget(const Vector2f &force, const float magnitude) cons
 		// nearer bound can point away from the demand. Take the end that
 		// realizes more, floored at zero (no reverse), and switch ends only
 		// past the margin
-		const float p_hi = fmaxf(0.f, force(0) * cosf(_tilt_max) + force(1) * sinf(_tilt_max));
-		const float p_lo = fmaxf(0.f, force(0) * cosf(_tilt_min) + force(1) * sinf(_tilt_min));
+		const float p_hi = fmaxf(0.f, demand(0) * cosf(_tilt_max) + demand(1) * sinf(_tilt_max));
+		const float p_lo = fmaxf(0.f, demand(0) * cosf(_tilt_min) + demand(1) * sinf(_tilt_min));
 
 		if (fmaxf(p_hi, p_lo) <= FLT_EPSILON) {
 			// Neither end realizes any of the demand, and the projection peaks
@@ -156,7 +156,7 @@ float AirshipPod::steerTarget(const Vector2f &force, const float magnitude) cons
 	if (fabsf(tilt - _tilt_target) > M_PI_F) {
 		const Vector2f committed{cosf(_tilt_target), sinf(_tilt_target)};
 
-		if (magnitude <= force.dot(committed) + switch_margin) {
+		if (magnitude <= demand.dot(committed) + switch_margin) {
 			tilt = _tilt_target;
 		}
 	}
