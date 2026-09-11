@@ -630,10 +630,10 @@ parameters:
                   differential thrust, so the pods produce no yaw or roll
                   torque. Independent gives each pod its own thrust and tilt
                   command on its own tilt servo. The pods never produce pitch
-                  torque. Any control surfaces are allocated first, credited by
-                  CA_AIRSHIP_CS_K, and the pods and the tail thruster
-                  (CA_AIRSHIP_TAIL) serve what is left; a torque axis none of
-                  them can serve is reported as unallocated.
+                  torque. A torque axis the pods do not serve falls to the
+                  control surfaces and, for yaw, the tail thruster
+                  (CA_AIRSHIP_TAIL); with neither it is reported as
+                  unallocated.
             type: enum
             values:
                 0: Collective
