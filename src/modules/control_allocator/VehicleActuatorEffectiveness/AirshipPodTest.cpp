@@ -197,6 +197,36 @@ TEST(AirshipPodTest, DriveProjectsOntoTheRealizedAxisAndNeverReverses)
 	EXPECT_NEAR(held.withheld(1), 0.f, 1e-6f);
 }
 
+TEST(AirshipPodTest, SeamCrossingNeedsToBeWorthTheSweep)
+{
+	// A full turn has no range end to switch at, so the seam is the only place
+	// a small change in demand can cost a whole servo travel
+	AirshipPod full = pod(-180.f, 180.f, 120.f);
+
+	for (int i = 0; i < 3000; i++) {
+		full.steer(force(-1.f, 0.09f), kDt);	// just outside the rear cone, near +180 deg
+	}
+
+	const float committed = full.tilt();
+	EXPECT_GT(committed, math::radians(170.f));
+
+	// The perpendicular component flips: the demand direction moves ~10 deg,
+	// but the far-side target is half a turn away and the committed tilt still
+	// realizes almost all of it, so the pod stands
+	for (int i = 0; i < 500; i++) {
+		full.steer(force(-1.f, -0.09f), kDt);
+	}
+
+	EXPECT_FLOAT_EQ(full.tilt(), committed);
+
+	// A demand that genuinely needs the other side still pays for the sweep
+	for (int i = 0; i < 3000; i++) {
+		full.steer(force(-1.f, -1.f), kDt);
+	}
+
+	EXPECT_NEAR(full.tilt(), math::radians(-135.f), 1e-5f);
+}
+
 TEST(AirshipPodTest, UnrealizableOutOfRangeDemandHoldsTheTilt)
 {
 	// Up-only range: a back-and-down demand is out of range and realizes

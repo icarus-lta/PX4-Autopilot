@@ -149,6 +149,18 @@ float AirshipPod::steerTarget(const Vector2f &force, const float magnitude) cons
 		}
 	}
 
+	// A target on the far side of the seam costs more than half the servo's
+	// travel to reach, because an end-stop mount cannot wrap. Pay that only
+	// for a real gain, as the end switch above: on a range narrower than a
+	// full turn no target is ever that far, so this is the seam's own switch
+	if (fabsf(tilt - _tilt_target) > M_PI_F) {
+		const Vector2f committed{cosf(_tilt_target), sinf(_tilt_target)};
+
+		if (magnitude <= force.dot(committed) + switch_margin) {
+			tilt = _tilt_target;
+		}
+	}
+
 	return math::constrain(tilt, _tilt_min, _tilt_max);
 }
 
