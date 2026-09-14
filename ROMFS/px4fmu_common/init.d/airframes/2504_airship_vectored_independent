@@ -29,5 +29,7 @@ param set-default CA_AIRSHIP_TLMIN -180
 param set-default CA_AIRSHIP_TLMAX 180
 param set-default CA_AIRSHIP_TLT_R 120
 
-# Set THR_MDL_FAC from the measured thrust curve; the AS_YAWRATE_* defaults
-# were tuned in the gz airship_vectored_independent model with THR_MDL_FAC 1
+# Set THR_MDL_FAC from the measured thrust curve. The AS_YAWRATE_* defaults
+# come from the gz airship_vectored_independent model, which has no hull
+# aerodynamics and no added mass, so its yaw plant has none of the damping a
+# real hull has: retune them on the vehicle

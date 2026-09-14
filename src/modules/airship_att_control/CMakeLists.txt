@@ -34,7 +34,6 @@
 px4_add_module(
 	MODULE modules__airship_att_control
 	MAIN airship_att_control
-	STACK_MAX 3500
 	COMPILE_FLAGS
 	SRCS
 		airship_att_control_main.cpp
