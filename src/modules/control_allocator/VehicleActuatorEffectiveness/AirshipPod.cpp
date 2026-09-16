@@ -122,8 +122,8 @@ float AirshipPod::steerTarget(const Vector2f &demand, const float magnitude) con
 			// back, and on an asymmetric range its perpendicular component
 			// decides which end is the better one. On a tie the ends share an
 			// axis, so keep the committed one
-			const float p_hi = demand.dot(Vector2f{cosf(rear_hi), sinf(rear_hi)});
-			const float p_lo = demand.dot(Vector2f{cosf(rear_lo), sinf(rear_lo)});
+			const float p_hi = realized(demand, rear_hi);
+			const float p_lo = realized(demand, rear_lo);
 
 			if (fabsf(p_hi - p_lo) > FLT_EPSILON) {
 				tilt = p_hi > p_lo ? rear_hi : rear_lo;
@@ -138,8 +138,8 @@ float AirshipPod::steerTarget(const Vector2f &demand, const float magnitude) con
 		// nearer bound can point away from the demand. Take the end that
 		// realizes more, floored at zero (no reverse), and switch ends only
 		// past the margin
-		const float p_hi = fmaxf(0.f, demand(0) * cosf(_tilt_max) + demand(1) * sinf(_tilt_max));
-		const float p_lo = fmaxf(0.f, demand(0) * cosf(_tilt_min) + demand(1) * sinf(_tilt_min));
+		const float p_hi = fmaxf(0.f, realized(demand, _tilt_max));
+		const float p_lo = fmaxf(0.f, realized(demand, _tilt_min));
 
 		if (fmaxf(p_hi, p_lo) <= FLT_EPSILON) {
 			// Neither end realizes any of the demand, and the projection peaks
@@ -164,13 +164,10 @@ float AirshipPod::steerTarget(const Vector2f &demand, const float magnitude) con
 	// for a real gain, as the end switch above: on a range narrower than a
 	// full turn no target is ever that far, so this is the seam's own switch
 	if (fabsf(tilt - _tilt_target) > M_PI_F) {
-		const Vector2f committed{cosf(_tilt_target), sinf(_tilt_target)};
-		const Vector2f target{cosf(tilt), sinf(tilt)};
-
 		// Score both by what they realize, as the end switch above: the target
 		// is the demand direction only on the in-range branch, and a committed
 		// end pointing away gives up nothing, so floor it
-		if (demand.dot(target) <= fmaxf(0.f, demand.dot(committed)) + switch_margin) {
+		if (realized(demand, tilt) <= fmaxf(0.f, realized(demand, _tilt_target)) + switch_margin) {
 			tilt = _tilt_target;
 		}
 	}

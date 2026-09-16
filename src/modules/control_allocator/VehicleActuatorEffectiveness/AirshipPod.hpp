@@ -123,6 +123,10 @@ private:
 	};
 
 	float steerTarget(const matrix::Vector2f &demand, float magnitude) const;
+
+	/** What a tilt realizes of a force demand: the demand's projection on the thrust axis at that tilt, signed */
+	static float realized(const matrix::Vector2f &demand, float tilt) { return demand(0) * cosf(tilt) + demand(1) * sinf(tilt); }
+
 	void slewToTarget(float dt);
 
 	SlewRate<float> _tilt{};	///< realized tilt [rad]
