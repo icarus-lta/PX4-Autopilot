@@ -200,31 +200,76 @@ TEST(AirshipPodTest, DriveProjectsOntoTheRealizedAxisAndNeverReverses)
 	EXPECT_NEAR(held.withheld(1), 0.f, 1e-6f);
 }
 
-TEST(AirshipPodTest, RearConePicksTheEndThatRealizesMore)
+TEST(AirshipPodTest, RearConeRanksTheEndsByTheRangeAlone)
 {
-	// Straight back on an asymmetric range: both ends point backward, but the
-	// demand is only near straight back, so its perpendicular component decides
-	// which end is better. Ranking by how backward an end points gets it wrong
-	AirshipPod pod_a = pod(-100.f, 99.f, 120.f);
-	const Vector2f rear = force(-1.f, 0.03f);
-
-	for (int i = 0; i < 9000; i++) {
-		pod_a.steer(rear, kDt);
-	}
-
-	const float hi = math::radians(99.f);
+	// Straight back on an asymmetric range, both ends pointing backward: the
+	// more backward end wins whichever way the perpendicular noise leans,
+	// because the cone is a deadband and the noise is not a signal
 	const float lo = math::radians(-100.f);
-	EXPECT_GT(rear.dot(Vector2f{cosf(hi), sinf(hi)}), rear.dot(Vector2f{cosf(lo), sinf(lo)}));
-	EXPECT_NEAR(pod_a.tilt(), hi, 1e-5f);
+
+	for (const float noise : {0.03f, -0.03f}) {
+		AirshipPod pod_a = pod(-100.f, 99.f, 120.f);
+
+		for (int i = 0; i < 9000; i++) {
+			pod_a.steer(force(-1.f, noise), kDt);
+		}
+
+		EXPECT_NEAR(pod_a.tilt(), lo, 1e-5f) << "noise " << noise;
+	}
 
 	// A symmetric range has both ends on one axis: the committed end stands
 	AirshipPod pod_s = pod(-180.f, 180.f, 120.f);
 
 	for (int i = 0; i < 9000; i++) {
-		pod_s.steer(rear, kDt);
+		pod_s.steer(force(-1.f, 0.03f), kDt);
 	}
 
 	EXPECT_NEAR(pod_s.tilt(), math::radians(180.f), 1e-5f);
+}
+
+TEST(AirshipPodTest, RearConePickThatRealizesNothingHolds)
+{
+	// One end barely past vertical (92 deg realizes 3.5 % of straight back)
+	// and a perpendicular component that cancels it: the pick would realize
+	// nothing, so it is not worth a move, even from the same side of the
+	// range where no sweep is priced
+	AirshipPod nearly_vertical = pod(-88.f, 92.f);
+	nearly_vertical.steer(force(0.985f, 0.174f), kDt);
+	EXPECT_NEAR(nearly_vertical.tilt(), math::radians(10.f), 1e-3f);
+
+	nearly_vertical.steer(force(-1.f, -0.0349f), kDt);
+	EXPECT_NEAR(nearly_vertical.tilt(), math::radians(10.f), 1e-3f);
+
+	// With the perpendicular the other way the end realizes 7 %: worth it
+	nearly_vertical.steer(force(-1.f, 0.0349f), kDt);
+	EXPECT_FLOAT_EQ(nearly_vertical.tilt(), math::radians(92.f));
+}
+
+TEST(AirshipPodTest, RearConeNoiseDoesNotDither)
+{
+	// Straight back with the perpendicular flipping sign every cycle inside
+	// the cone, on a wide range where both ends point backward: ranked by the
+	// demand the pick would flip with the noise and the servo would strand
+	// mid-range; ranked by the range it reaches an end and stays
+	AirshipPod wide = pod(-100.f, 100.f, 120.f);
+	float previous = wide.tilt();
+	float previous_step = 0.f;
+	int reversals = 0;
+
+	for (int i = 0; i < 500; i++) {
+		wide.steer(force(-1.f, (i % 2 == 0) ? 0.03f : -0.03f), kDt);
+		const float step = wide.tilt() - previous;
+
+		if (step * previous_step < 0.f) {
+			reversals++;
+		}
+
+		previous_step = step;
+		previous = wide.tilt();
+	}
+
+	EXPECT_EQ(reversals, 0);
+	EXPECT_NEAR(wide.tilt(), math::radians(100.f), 1e-5f);
 }
 
 TEST(AirshipPodTest, AsymmetricRangeDoesNotSweepForLessThrust)
@@ -312,6 +357,37 @@ TEST(AirshipPodTest, OutOfRangeDemandSwitchesEndsOnlyPastTheMargin)
 	down_only.steer(force(-0.3f, 1.f), kDt);
 	EXPECT_FLOAT_EQ(down_only.tilt(), -M_PI_F);
 }
+
+TEST(AirshipPodTest, RearConeSwitchesEndsOnlyPastTheMargin)
+{
+	// A servo that just passes vertical on one side: the ends are 180 deg
+	// apart, so no target is ever across the seam, and only the positive end
+	// points backward, by 3.5 % of a straight-back demand
+	AirshipPod nearly_vertical = pod(-88.f, 92.f);
+	nearly_vertical.steer(force(0.f, -1.f), kDt);
+	EXPECT_FLOAT_EQ(nearly_vertical.tilt(), math::radians(-88.f));
+
+	// Straight back is inside the rear cone: the positive end realizes more,
+	// but by less than the margin, and reaching it sweeps the whole range
+	nearly_vertical.steer(force(-1.f, 0.f), kDt);
+	EXPECT_FLOAT_EQ(nearly_vertical.tilt(), math::radians(-88.f));
+
+	// The same from a tilt left mid-range by tracking: the pick realizes
+	// less than the margin wherever it starts
+	AirshipPod mid_range = pod(-88.f, 92.f);
+	mid_range.steer(force(0.05f, -1.f), kDt);
+	EXPECT_NEAR(mid_range.tilt(), math::radians(-87.14f), 1e-3f);
+	mid_range.steer(force(-1.f, 0.f), kDt);
+	EXPECT_NEAR(mid_range.tilt(), math::radians(-87.14f), 1e-3f);
+
+	// Three degrees further past vertical the positive end realizes 8.7 %:
+	// past the margin, the sweep is paid for
+	AirshipPod past_vertical = pod(-85.f, 95.f);
+	past_vertical.steer(force(0.f, -1.f), kDt);
+	past_vertical.steer(force(-1.f, 0.f), kDt);
+	EXPECT_FLOAT_EQ(past_vertical.tilt(), math::radians(95.f));
+}
+
 
 TEST(AirshipPodTest, SlewMovesRateTimesDt)
 {

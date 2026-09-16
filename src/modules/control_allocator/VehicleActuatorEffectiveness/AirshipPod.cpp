@@ -89,13 +89,13 @@ void AirshipPod::slewToTarget(const float dt)
 
 float AirshipPod::steerTarget(const Vector2f &demand, const float magnitude) const
 {
-	// Both branches below answer one question: bring the demand direction into
-	// the range, compare the candidate ends by what each realizes, hold when
-	// neither realizes anything, and switch only past the margin. They stay
-	// apart because the rear cone is a deadband as well as a branch cut:
-	// straight back, atan2 flips between +-180 deg on noise in the
-	// perpendicular component, so snapping to one end keeps the servo still
-	// where tracking the demand would dither
+	// Both branches below bring the demand direction into the range, picking
+	// an end when it lies outside, and neither moves for a gain below the
+	// margin, scored by what the candidate realizes. They stay apart because
+	// the rear cone is a deadband as well as a branch cut: straight back,
+	// atan2 flips between +-180 deg on noise in the perpendicular component,
+	// so the cone ranks the ends by the range alone where tracking the
+	// demand would dither
 	float tilt = atan2f(demand(1), demand(0));
 
 	// Switching ends costs a full sweep of an end-stop servo: ignore smaller
@@ -103,9 +103,10 @@ float AirshipPod::steerTarget(const Vector2f &demand, const float magnitude) con
 	const float switch_margin = fmaxf(kEndSwitchMargin * magnitude, kSteerRelease);
 
 	if (demand(0) < 0.f && fabsf(demand(1)) < switch_margin) {
-		// Straight back, atan2 flips between +-180 deg on the sign of the
-		// perpendicular component: pick the range end that realizes the
-		// demand best, on a tie keep the committed end
+		// Straight back: the perpendicular component is noise, so rank the
+		// ends by how backward each points, a function of the range and the
+		// committed end alone, which cannot dither. On a tie the ends point
+		// equally backward, so keep the committed one
 		const float rear_hi = math::constrain(M_PI_F, _tilt_min, _tilt_max);
 		const float rear_lo = math::constrain(-M_PI_F, _tilt_min, _tilt_max);
 		const float reverse_hi = -cosf(rear_hi);
@@ -116,21 +117,21 @@ float AirshipPod::steerTarget(const Vector2f &demand, const float magnitude) con
 			// almost nothing, so the tilt stays
 			tilt = _tilt_target;
 
+		} else if (fabsf(reverse_hi - reverse_lo) > FLT_EPSILON) {
+			tilt = reverse_hi > reverse_lo ? rear_hi : rear_lo;
+
 		} else {
-			// Both ends point backward, so rank them the way the end switch
-			// does, by what each realizes: the demand is only near straight
-			// back, and on an asymmetric range its perpendicular component
-			// decides which end is the better one. On a tie the ends share an
-			// axis, so keep the committed one
-			const float p_hi = realized(demand, rear_hi);
-			const float p_lo = realized(demand, rear_lo);
+			tilt = _tilt_target >= 0.f ? rear_hi : rear_lo;
+		}
 
-			if (fabsf(p_hi - p_lo) > FLT_EPSILON) {
-				tilt = p_hi > p_lo ? rear_hi : rear_lo;
-
-			} else {
-				tilt = _tilt_target >= 0.f ? rear_hi : rear_lo;
-			}
+		// An end barely past vertical realizes little, and the perpendicular
+		// can cancel even that: a pick that realizes less than the margin of
+		// the demand is not worth any move. With the seam switch below this
+		// prices every cone pick: one that clears the margin from a target
+		// on the other side of the range gains it all, because that target
+		// realizes nothing
+		if (realized(demand, tilt) <= switch_margin) {
+			tilt = _tilt_target;
 		}
 
 	} else if (tilt < _tilt_min || tilt > _tilt_max) {
@@ -160,13 +161,13 @@ float AirshipPod::steerTarget(const Vector2f &demand, const float magnitude) con
 	}
 
 	// A target on the far side of the seam costs more than half the servo's
-	// travel to reach, because an end-stop mount cannot wrap. Pay that only
-	// for a real gain, as the end switch above: on a range narrower than a
-	// full turn no target is ever that far, so this is the seam's own switch
+	// travel to reach, because an end-stop mount cannot wrap; on a range no
+	// wider than a half turn no target is ever that far. Pay that only for a
+	// gain past the margin, as the end switch above: score both by what they
+	// realize, and floor the committed target, which gives up nothing when
+	// it points away. On the in-range branch the target is the demand
+	// direction itself
 	if (fabsf(tilt - _tilt_target) > M_PI_F) {
-		// Score both by what they realize, as the end switch above: the target
-		// is the demand direction only on the in-range branch, and a committed
-		// end pointing away gives up nothing, so floor it
 		if (realized(demand, tilt) <= fmaxf(0.f, realized(demand, _tilt_target)) + switch_margin) {
 			tilt = _tilt_target;
 		}
