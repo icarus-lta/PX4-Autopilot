@@ -35,6 +35,8 @@
 
 #include "AirshipPod.hpp"
 
+#include <random>
+
 using namespace matrix;
 
 static constexpr float kDt = 0.02f;
@@ -388,6 +390,102 @@ TEST(AirshipPodTest, RearConeSwitchesEndsOnlyPastTheMargin)
 	EXPECT_FLOAT_EQ(past_vertical.tilt(), math::radians(95.f));
 }
 
+TEST(AirshipPodTest, MarginBoundsEverySweepAndEveryHold)
+{
+	// The one rule every branch of the tilt policy keeps, both ways: a sweep,
+	// from one range end to the other, across the seam, or a rear-cone pick
+	// that leaves the committed target's side of the range, is paid for only
+	// by a gain past the margin; and a hold forgoes no more than the margin
+	// against the best angle in the range, where inside the rear cone the
+	// candidates are the ends and the perpendicular component, noise there,
+	// is not counted. Sampled over
+	// the parameter range of tilt ranges and their corners, over committed
+	// targets and over demands, so no branch can drift from the rule
+	// unnoticed: each fix to the policy so far was one branch pricing a move
+	// by a yardstick its siblings did not use, and this sample catches every
+	// one of them
+	std::mt19937 rng(42);
+	auto uniform = [&rng](float lo, float hi) { return lo + (hi - lo) * ((rng() >> 8) / 16777216.f); };
+	auto realized = [](const Vector2f & demand, float tilt) { return fmaxf(0.f, demand(0) * cosf(tilt) + demand(1) * sinf(tilt)); };
+	int sweeps = 0;
+
+	for (int i = 0; i < 200000; i++) {
+		// Draw in statements: argument evaluation order is unspecified
+		const float lo_deg = i % 7 == 0 ? -180.f : (i % 11 == 0 ? 0.f : uniform(-180.f, 0.f));
+		const float hi_deg = i % 5 == 0 ? 180.f : (i % 13 == 0 ? 0.f : uniform(0.f, 180.f));
+		const float tilt_min = math::radians(lo_deg);
+		const float tilt_max = math::radians(hi_deg);
+		AirshipPod sampled;
+		sampled.setTiltRange(tilt_min, tilt_max);
+
+		// Commit a target somewhere, then ask for something else
+		const float settle_forward = uniform(-1.2f, 1.2f);
+		const float settle_up = uniform(-1.2f, 1.2f);
+		sampled.steer(force(settle_forward, settle_up), kDt);
+		const float committed = sampled.tilt();
+		const float forward = uniform(-1.2f, 1.2f);
+		const float up = uniform(-1.2f, 1.2f);
+		const Vector2f demand = force(forward, up);
+		sampled.steer(demand, kDt);
+		const float target = sampled.tilt();
+
+		ASSERT_GE(target, tilt_min);
+		ASSERT_LE(target, tilt_max);
+
+		if (demand.norm() <= AirshipPod::kSteerEngage) {
+			continue;	// not steered
+		}
+
+		const float margin = fmaxf(AirshipPod::kEndSwitchMargin * demand.norm(), AirshipPod::kSteerRelease);
+		const float direction = atan2f(demand(1), demand(0));
+		const bool in_range = direction >= tilt_min && direction <= tilt_max;
+		const bool in_cone = demand(0) < 0.f && fabsf(demand(1)) < margin;
+		const bool committed_hi = committed - tilt_min > tilt_max - committed;
+		// "At an end" is the contract's width; kTiltSettledTolerance is private.
+		// Tracking an in-range direction is free even when it lands on the
+		// other end of a narrow range: only an end picked for an out-of-range
+		// direction is a switch
+		const bool from_lo = fabsf(committed - tilt_min) < 1e-3f;
+		const bool from_hi = fabsf(committed - tilt_max) < 1e-3f;
+		const bool end_switch = !in_range && !in_cone
+					&& ((from_lo && !from_hi && fabsf(target - tilt_max) < 1e-3f)
+					    || (from_hi && !from_lo && fabsf(target - tilt_min) < 1e-3f));
+		const bool cone_across = in_cone && (committed_hi ? target < committed : target > committed);
+
+		if (end_switch || cone_across || fabsf(target - committed) > M_PI_F) {
+			sweeps++;
+			EXPECT_GT(realized(demand, target), realized(demand, committed) + margin - 1e-5f)
+					<< "unpaid sweep, sample " << i << ": range " << lo_deg << ".." << hi_deg
+					<< " deg, demand (" << demand(0) << ", " << demand(1) << "), "
+					<< math::degrees(committed) << " -> " << math::degrees(target) << " deg";
+		}
+
+		// The projection peaks once around the circle: the best angle in the
+		// range is the demand direction if it is inside, else the better end.
+		// Inside the cone the ends are the only candidates and the
+		// perpendicular is noise: what it is worth at either end is not owed
+		float best = fmaxf(realized(demand, tilt_min), realized(demand, tilt_max));
+		float owed = margin;
+
+		if (in_cone) {
+			owed += 2.f * fabsf(demand(1));
+
+		} else if (in_range) {
+			best = fmaxf(best, demand.norm());
+		}
+
+		EXPECT_LE(best - realized(demand, target), owed + 1e-5f)
+				<< "left on the table, sample " << i << ": range " << lo_deg << ".." << hi_deg
+				<< " deg, demand (" << demand(0) << ", " << demand(1) << "), "
+				<< math::degrees(committed) << " -> " << math::degrees(target) << " deg";
+
+		// A constant demand is a fixed point
+		sampled.steer(demand, kDt);
+		EXPECT_FLOAT_EQ(sampled.tilt(), target);
+	}
+
+	EXPECT_GT(sweeps, 1000) << "the sample must actually exercise sweeps";
+}
 
 TEST(AirshipPodTest, SlewMovesRateTimesDt)
 {
