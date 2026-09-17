@@ -17,9 +17,12 @@ The frame configurations are shown in [Airframes Reference > Airship](../airfram
 
 ## Simulation
 
-[Gazebo](../sim_gazebo_gz/index.md) models are provided for the independently vectored airship:
+[Gazebo](../sim_gazebo_gz/index.md) models are provided for the independently vectored airship and for the Cloudship:
 
 - `make px4_sitl gz_airship_vectored_independent` — rigid hull, no aerodynamic forces.
 - `make px4_sitl gz_airship_vectored_independent_aero` — the same vehicle with hull drag and rotational damping.
+- `make px4_sitl gz_cloudship` — collective thrust on one tilt, with a reversible tail thruster for yaw.
 
-Running the same airframe against both separates what the control loop owes to the model from what it owes to itself.
+Running the vectored airframe against both of its models separates what the control loop owes to the model from what it owes to itself.
+
+The Cloudship also has an older [Gazebo Classic](../sim_gazebo_classic/index.md) model, which uses a different allocation and is not kept in step with the flight airframe.

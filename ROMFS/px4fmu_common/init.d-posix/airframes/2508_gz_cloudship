@@ -1,0 +1,93 @@
+#!/bin/sh
+#
+# @name Cloudship (gz)
+#
+# @type Airship
+# @class Airship
+#
+# @maintainer Hyunduk Shin <hyunduk@icarus-airship.com>
+#
+# @output Motor1 starboard thruster
+# @output Motor2 port thruster
+# @output Motor3 tail thruster
+# @output Servo1 thrust tilt
+#
+
+. ${R}etc/init.d/rc.airship_defaults
+
+# The same vehicle as 2507 on the flight side, in gz. It is 2508 and not 2507
+# because 2507 in this directory is upstream's gazebo-classic build of the
+# same airship, which this does not touch; the two simulators sit next to
+# each other and only the flight airframe has one number.
+
+param set-default COM_PREARM_MODE 2
+
+PX4_SIMULATOR=${PX4_SIMULATOR:=gz}
+PX4_GZ_WORLD=${PX4_GZ_WORLD:=lta}
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=cloudship}
+
+param set-default SIM_GZ_EN 1
+
+# Simulation only: allow arming without a GCS connection
+param set-default NAV_DLL_ACT 0
+
+# gz motors: 1 = starboard thruster, 2 = port, 3 = tail. The thrusters run
+# 0..1500 rad/s for 15.89 N each and their gz plugin reads that as a rotor
+# speed. The tail is the vehicle's only yaw authority, so CA_R_REV below makes
+# it reversible, and a reversible motor keeps its command in -1..1 while the
+# bridge maps that onto MIN..MAX.
+#
+# MIN cannot be negative. MixingOutput holds the range in a uint16_t and then
+# swaps the pair when min exceeds max, so a MIN3 of -1500 reaches gz as
+# 64036, neutral as 32768, and the gz motor clamps only from above: the tail
+# would sit at full forward thrust with the stick centred. The parameter store
+# does keep the -1500 - param_info_s carries no bounds - which is what makes
+# it quiet.
+#
+# So the range stays non-negative and the sign lives in the model, the same
+# way uuv_bluerov2_heavy does it: 1100..1900 with 1500 as neutral, read by a
+# GenericMotorModel in duty_cycle + bidirectionalMotor mode. DIS3 is the
+# neutral duty rather than the 0 the other two use, because for this motor 0
+# is not "stopped", it is below the duty range entirely.
+param set-default SIM_GZ_EC_FUNC1 101
+param set-default SIM_GZ_EC_FUNC2 102
+param set-default SIM_GZ_EC_FUNC3 103
+param set-default SIM_GZ_EC_MIN1 0
+param set-default SIM_GZ_EC_MIN2 0
+param set-default SIM_GZ_EC_MIN3 1100
+param set-default SIM_GZ_EC_MAX1 1500
+param set-default SIM_GZ_EC_MAX2 1500
+param set-default SIM_GZ_EC_MAX3 1900
+param set-default SIM_GZ_EC_DIS3 1500
+
+# gz thrust is quadratic in the rotor speed command: linearize it so a
+# normalized torque demand is the torque the thrusters deliver at every level
+param set-default THR_MDL_FAC 1
+
+# One tilt servo for both thrusters. The angle range must equal
+# CA_AIRSHIP_TLMIN/TLMAX below: the allocator projects thrust with the CA
+# range and the gz servo bridge maps the servo output onto this one.
+param set-default SIM_GZ_SV_FUNC1 201
+param set-default SIM_GZ_SV_MINA1 -90
+param set-default SIM_GZ_SV_MAXA1 90
+
+# Collective thrust on one tilt, with the tail taking the yaw the thrusters
+# cannot. The tilt range matches the flight airframe's, which says in its own
+# comment that it is assumed and not measured on the vehicle; the
+# gazebo-classic model drives its rod to +-135 instead, and with the opposite
+# sign. Nobody here has the vehicle's number, so the two sides at least agree.
+param set-default CA_AIRFRAME 16
+param set-default CA_AIRSHIP_GRP 0
+param set-default CA_AIRSHIP_TAIL 1
+param set-default CA_AIRSHIP_TLMIN -90
+param set-default CA_AIRSHIP_TLMAX 90
+param set-default CA_AIRSHIP_TLT_R 120
+
+param set-default CA_R_REV 4
+
+# No gains are set here on purpose. This vehicle is a seventh of the generic
+# airship's size but its angular acceleration per unit of normalized command
+# comes out the same: 3.93 N m of tail yaw against 5.67 kg m^2 is 0.69 rad/s^2
+# where 54 N m against 76.5 is 0.71, and the pendulum periods match to 5% as
+# well. So rc.airship_defaults' tuning transfers, and a difference in the gate
+# is a difference in the plant rather than in the gains.
