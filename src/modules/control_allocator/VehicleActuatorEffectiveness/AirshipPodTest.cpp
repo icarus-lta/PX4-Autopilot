@@ -185,7 +185,8 @@ TEST(AirshipPodTest, DriveProjectsOntoTheRealizedAxisAndNeverReverses)
 	EXPECT_FLOAT_EQ(up.thrust, 0.8f);			// only the component along the axis
 	EXPECT_NEAR(up.achieved(0), 0.f, 1e-6f);
 	EXPECT_FLOAT_EQ(up.achieved(1), 0.8f);
-	EXPECT_NEAR(up.withheld(1), 0.f, 1e-6f);		// steering: nothing withheld by choice
+	EXPECT_NEAR(up.withheld(0), 0.f, 1e-6f);		// steering: nothing withheld by choice,
+	EXPECT_NEAR(up.withheld(1), 0.f, 1e-6f);		// not even the 0.6 the axis cannot serve
 
 	// A demand behind the axis cannot be pushed, and a CA_R_REV bit on a pod
 	// motor does not buy reverse either: the propeller reverses only by tilting
@@ -196,10 +197,10 @@ TEST(AirshipPodTest, DriveProjectsOntoTheRealizedAxisAndNeverReverses)
 	// Held by choice: the whole residual, clamp shortfall included, is withheld
 	full.steer(force(0.f, 0.015f), kDt);
 	ASSERT_TRUE(full.heldByChoice());
-	const AirshipPod::Drive held = full.drive(force(-0.01f, 0.f), 0.f, 1.f);
+	const AirshipPod::Drive held = full.drive(force(-0.01f, -0.5f), 0.f, 1.f);
 	EXPECT_NEAR(held.thrust, 0.f, 1e-6f);
 	EXPECT_FLOAT_EQ(held.withheld(0), -0.01f);
-	EXPECT_NEAR(held.withheld(1), 0.f, 1e-6f);
+	EXPECT_FLOAT_EQ(held.withheld(1), -0.5f);	// the clamp shortfall, not just the unserved axis
 }
 
 TEST(AirshipPodTest, RearConeRanksTheEndsByTheRangeAlone)
@@ -525,6 +526,20 @@ TEST(AirshipPodTest, ServoRoundTripAndClampReadBack)
 
 TEST(AirshipPodTest, RangeNarrowingClampsTheStateAndTheTarget)
 {
+	// A pod still slewing toward a target keeps that target across the
+	// range change, so the clamp on the target is observable: without it
+	// the tilt walks to the stale angle and servoSetpoint() leaves [-1, 1]
+	AirshipPod slewing = pod(-180.f, 180.f, 90.f);
+	slewing.steer(force(-1.f, 0.f), kDt);
+	slewing.setTiltRange(0.f, math::radians(10.f));
+
+	for (int i = 0; i < 200; i++) {
+		slewing.steer(force(-0.015f, 0.f), kDt);	// in the band: the target stands
+	}
+
+	EXPECT_FLOAT_EQ(slewing.tilt(), math::radians(10.f));
+	EXPECT_FLOAT_EQ(slewing.servoSetpoint(), 1.f);
+
 	AirshipPod full = pod(-180.f, 180.f);
 	full.steer(force(-1.f, 0.f), kDt);
 	EXPECT_FLOAT_EQ(full.tilt(), M_PI_F);
