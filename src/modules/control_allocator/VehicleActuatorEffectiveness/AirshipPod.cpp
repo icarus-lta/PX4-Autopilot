@@ -112,12 +112,7 @@ float AirshipPod::steerTarget(const Vector2f &demand, const float magnitude) con
 		const float reverse_hi = -cosf(rear_hi);
 		const float reverse_lo = -cosf(rear_lo);
 
-		if (fmaxf(reverse_hi, reverse_lo) <= FLT_EPSILON) {
-			// No end points backward (e.g. -90..90): a sweep would realize
-			// almost nothing, so the tilt stays
-			tilt = _tilt_target;
-
-		} else if (fabsf(reverse_hi - reverse_lo) > FLT_EPSILON) {
+		if (fabsf(reverse_hi - reverse_lo) > FLT_EPSILON) {
 			tilt = reverse_hi > reverse_lo ? rear_hi : rear_lo;
 
 		} else {
@@ -126,7 +121,9 @@ float AirshipPod::steerTarget(const Vector2f &demand, const float magnitude) con
 
 		// An end barely past vertical realizes little, and the perpendicular
 		// can cancel even that: a pick that realizes less than the margin of
-		// the demand is not worth any move. With the seam switch below this
+		// the demand is not worth any move. An end that points forward
+		// realizes nothing of a rear demand, so this also holds a range
+		// with no backward end at all. With the seam switch below this
 		// prices every cone pick: one that clears the margin from a target
 		// on the other side of the range gains it all, because that target
 		// realizes nothing
