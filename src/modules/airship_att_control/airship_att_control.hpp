@@ -109,11 +109,6 @@ private:
 	/** Integrator state for logging */
 	void publishRateControlStatus();
 
-	bool manualInputUsable() const
-	{
-		return airship_manual_input::manualInputUsable(_vehicle_control_mode, _manual_control_setpoint);
-	}
-
 	RateControl _rate_control; ///< yaw axis only: roll and pitch gains stay zero
 
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};

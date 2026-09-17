@@ -201,7 +201,8 @@ AirshipAttitudeControl::Run()
 		_vehicle_control_mode_sub.update(&_vehicle_control_mode);
 
 		// zero actuators unless armed with usable manual input
-		const bool manual_input_usable = manualInputUsable();
+		const bool manual_input_usable = airship_manual_input::manualInputUsable(_vehicle_control_mode,
+						 _manual_control_setpoint);
 		const Vector3f thrust = manual_input_usable ? airship_manual_input::thrust(_manual_control_setpoint) : Vector3f{};
 		Vector3f torque = manual_input_usable ? airship_manual_input::torque(_manual_control_setpoint) : Vector3f{};
 
