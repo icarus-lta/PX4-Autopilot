@@ -56,7 +56,7 @@ TEST(AirshipManualInputTest, ThrottleMapsToForwardThrust)
 	EXPECT_FLOAT_EQ(thrust(sticks(0.f, 0.f, 0.f, -1.f))(0), 0.f);
 	EXPECT_FLOAT_EQ(thrust(sticks(0.f, 0.f, 0.f, 0.f))(0), 0.5f);
 	EXPECT_FLOAT_EQ(thrust(sticks(0.f, 0.f, 0.f, 1.f))(0), 1.f);
-	EXPECT_FLOAT_EQ(thrust(sticks(0.f, 0.f, 0.f, 1.f))(1), 0.f);
+	EXPECT_FLOAT_EQ(thrust(sticks(0.4f, 0.5f, -0.7f, 1.f))(1), 0.f);
 }
 
 TEST(AirshipManualInputTest, PitchStickIsVerticalThrustAndPitchTorque)
