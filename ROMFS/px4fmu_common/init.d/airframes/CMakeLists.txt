@@ -128,8 +128,8 @@ endif()
 if(CONFIG_MODULES_AIRSHIP_ATT_CONTROL)
 	px4_add_romfs_files(
 		2500_generic_airship
-		2510_airship_vectored_independent
 		2507_cloudship
+		2510_airship_vectored_independent
 	)
 endif()
 

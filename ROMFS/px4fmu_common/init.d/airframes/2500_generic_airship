@@ -20,9 +20,10 @@
 
 param set-default COM_PREARM_MODE 2
 
-# One collective thrust command; a zero tilt range allocates no tilt servos,
-# so the control surfaces start at Servo1 (the ground station's actuator
-# list shows one unused pod tilt servo after them)
+# One collective thrust command with the pods fixed thrusting forward. The
+# zero tilt range allocates no tilt servos; the ground station's actuator
+# list still shows one pod tilt servo after the control surfaces, which the
+# firmware never drives
 param set-default CA_AIRFRAME 16
 param set-default CA_AIRSHIP_GRP 0
 param set-default CA_AIRSHIP_TLMIN 0
