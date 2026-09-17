@@ -975,16 +975,14 @@ TEST(ActuatorEffectivenessAirshipTest, SettledPodsDoNotReportRoundingAsSaturatio
 	control_sp(ActuatorEffectiveness::ControlAxis::THRUST_Z) = -0.60f;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
 
-	for (int i = 0; i < 400; i++) {	// let both tilts settle
-		runUpdateSetpoint(airship, control_sp, actuator_sp);
-	}
+	// resetAirshipParams leaves CA_AIRSHIP_TLT_R at 0, so each tilt reaches
+	// its target in one update: there is nothing to settle, and the residual
+	// under test is the round trip alone
+	runUpdateSetpoint(airship, control_sp, actuator_sp);
 
 	for (const float yaw_sp : {0.0026f, 0.0031f, 0.0064f, 0.05f}) {
 		control_sp(ActuatorEffectiveness::ControlAxis::YAW) = yaw_sp;
-
-		for (int i = 0; i < 400; i++) {
-			runUpdateSetpoint(airship, control_sp, actuator_sp);
-		}
+		runUpdateSetpoint(airship, control_sp, actuator_sp);
 
 		control_allocator_status_s status{};
 		airship.getUnallocatedControl(0, status);
@@ -1267,7 +1265,7 @@ TEST(ActuatorEffectivenessAirshipTest, SaturatedSurfaceNotOverCredited)
 	EXPECT_FLOAT_EQ(actuator_sp(SURFACE_RUDDER), 1.5f); // clipping stays the allocator's job
 }
 
-TEST(ActuatorEffectivenessAirshipTest, DemandAtReleaseThresholdDoesNotHoldSteering)
+TEST(ActuatorEffectivenessAirshipTest, DemandAtReleaseThresholdDoesNotMoveTheTilts)
 {
 	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
@@ -1280,8 +1278,11 @@ TEST(ActuatorEffectivenessAirshipTest, DemandAtReleaseThresholdDoesNotHoldSteeri
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
 
-	// A demand exactly at the release threshold releases (the hold is a
-	// strict comparison): the tilts stay where they are, in either sign
+	// A demand exactly at the release threshold moves neither tilt, in
+	// either sign. Which branch it takes, Holding or Released, this test
+	// cannot see: with CA_AIRSHIP_TLT_R at 0 the tilt already sits on its
+	// target, so both emit the same servo output. AirshipPodTest's
+	// DemandAtTheReleaseThresholdReleases owns that boundary
 	for (const float sign : {1.f, -1.f}) {
 		control_sp(ActuatorEffectiveness::ControlAxis::YAW) = sign * AirshipPod::kSteerRelease;
 		runUpdateSetpoint(airship, control_sp, actuator_sp);
@@ -1681,6 +1682,34 @@ TEST(ActuatorEffectivenessAirshipTest, SteerBandShortfallIsNotSaturation)
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
 	airship.getUnallocatedControl(0, status);
 	EXPECT_FLOAT_EQ(status.unallocated_torque[2], 0.f);
+}
+
+TEST(ActuatorEffectivenessAirshipTest, OppositeSignedHoldIsNotDiscounted)
+{
+	resetAirshipParams();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	// Commit both tilts rearward, so the seam keeps them there afterwards
+	Vector<float, 6> rear{};
+	rear(ActuatorEffectiveness::ControlAxis::THRUST_X) = -1.f;
+	ActuatorEffectiveness::ActuatorVector actuator_sp{};
+	runUpdateSetpoint(airship, rear, actuator_sp);
+
+	// One pod now holds in the steer band while the other is floored by the
+	// non-reversible clamp, so on the vertical axis the held share and the
+	// shortfall point opposite ways. Only a same-signed share may be
+	// discounted: subtract this one and the axis stops reporting a
+	// saturation the rate integrator has to see
+	Vector<float, 6> split{};
+	split(ActuatorEffectiveness::ControlAxis::ROLL) = -0.023f;
+	split(ActuatorEffectiveness::ControlAxis::YAW) = -0.12f;
+	split(ActuatorEffectiveness::ControlAxis::THRUST_X) = -0.12f;
+	split(ActuatorEffectiveness::ControlAxis::THRUST_Z) = 0.007f;
+	runUpdateSetpoint(airship, split, actuator_sp);
+
+	control_allocator_status_s status{};
+	airship.getUnallocatedControl(0, status);
+	EXPECT_FLOAT_EQ(status.unallocated_thrust[2], 1.f);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, SteerBandVerticalShortfallIsNotSaturation)
