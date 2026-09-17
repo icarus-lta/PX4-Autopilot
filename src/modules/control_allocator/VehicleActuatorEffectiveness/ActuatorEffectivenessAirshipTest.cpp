@@ -1265,32 +1265,6 @@ TEST(ActuatorEffectivenessAirshipTest, SaturatedSurfaceNotOverCredited)
 	EXPECT_FLOAT_EQ(actuator_sp(SURFACE_RUDDER), 1.5f); // clipping stays the allocator's job
 }
 
-TEST(ActuatorEffectivenessAirshipTest, DemandAtReleaseThresholdDoesNotMoveTheTilts)
-{
-	resetAirshipParams();
-	ActuatorEffectivenessAirship airship(nullptr);
-
-	// Establish a steered tilt with a full yaw couple
-	Vector<float, 6> control_sp{};
-	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
-	ActuatorEffectiveness::ActuatorVector actuator_sp{};
-	runUpdateSetpoint(airship, control_sp, actuator_sp);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
-	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
-
-	// A demand exactly at the release threshold moves neither tilt, in
-	// either sign. Which branch it takes, Holding or Released, this test
-	// cannot see: with CA_AIRSHIP_TLT_R at 0 the tilt already sits on its
-	// target, so both emit the same servo output. AirshipPodTest's
-	// DemandAtTheReleaseThresholdReleases owns that boundary
-	for (const float sign : {1.f, -1.f}) {
-		control_sp(ActuatorEffectiveness::ControlAxis::YAW) = sign * AirshipPod::kSteerRelease;
-		runUpdateSetpoint(airship, control_sp, actuator_sp);
-		EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
-		EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 0.f);
-	}
-}
-
 TEST(ActuatorEffectivenessAirshipTest, SteerHysteresisBand)
 {
 	resetAirshipParams();
