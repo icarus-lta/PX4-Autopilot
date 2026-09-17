@@ -110,18 +110,6 @@ private:
 	void writeTiltServos(ActuatorVector &actuator_sp, const ActuatorVector &actuator_min,
 			     const ActuatorVector &actuator_max);
 
-	/**
-	 * Remove from a shortfall the share a pod withheld by choice (see
-	 * AirshipPod::heldByChoice): reported as saturation it would freeze the
-	 * rate integrator against the small steady torques the integral exists
-	 * to remove. Only a same-signed share is removed, because the two pods
-	 * can withhold and fall short in opposite directions -- one holding in
-	 * the steer band while the other is floored by the non-reversible clamp.
-	 * Subtracting the whole share would then flip the published sign and
-	 * drive the integrator the wrong way.
-	 */
-	static float discountHeld(float shortfall, float held);
-
 	/*
 	 * A shortfall this small is rounding, not saturation. The pods' achieved
 	 * wrench comes through atan2f, cosf/sinf and the servo round trip, which
@@ -137,7 +125,17 @@ private:
 	/** +1, -1 or 0: the direction of a shortfall, as the rate controller reads it */
 	static float saturationSign(float shortfall);
 
-	/** What an axis was asked for, less what the pods and the tail delivered, less the share they withheld by choice */
+	/**
+	 * What an axis was asked for, less what the pods and the tail delivered,
+	 * less the share they withheld by choice (see AirshipPod::heldByChoice):
+	 * reported as saturation that share would freeze the rate integrator
+	 * against the small steady torques the integral exists to remove. Only a
+	 * same-signed share is removed, because the two pods can withhold and
+	 * fall short in opposite directions -- one holding in the steer band
+	 * while the other is floored by the non-reversible clamp. Subtracting the
+	 * whole share would then flip the published sign and drive the integrator
+	 * the wrong way.
+	 */
 	float shortfall(float asked, int axis) const;
 
 	AirshipPod _pods[NUM_PODS] {};

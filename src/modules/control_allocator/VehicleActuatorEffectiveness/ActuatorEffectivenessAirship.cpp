@@ -255,19 +255,16 @@ ActuatorEffectivenessAirship::writeTiltServos(ActuatorVector &actuator_sp, const
 }
 
 float
-ActuatorEffectivenessAirship::discountHeld(float shortfall, float held)
-{
-	if (shortfall * held > 0.f) {
-		return copysignf(fmaxf(fabsf(shortfall) - fabsf(held), 0.f), shortfall);
-	}
-
-	return shortfall;
-}
-
-float
 ActuatorEffectivenessAirship::shortfall(const float asked, const int axis) const
 {
-	return discountHeld(asked - _achieved(axis), _held(axis));
+	const float raw = asked - _achieved(axis);
+	const float held = _held(axis);
+
+	if (raw * held > 0.f) {
+		return copysignf(fmaxf(fabsf(raw) - fabsf(held), 0.f), raw);
+	}
+
+	return raw;
 }
 
 float
