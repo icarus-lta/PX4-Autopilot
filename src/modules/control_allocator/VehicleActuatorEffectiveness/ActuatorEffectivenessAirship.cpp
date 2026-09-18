@@ -196,8 +196,7 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 
 	writeTiltServos(actuator_sp, actuator_min, actuator_max);
 
-	Vector2f achieved[NUM_PODS] {};
-	Vector2f held[NUM_PODS] {};
+	AirshipPod::Drive pod_drive[NUM_PODS] {};
 
 	// After writeTiltServos(), so each pod projects onto the angle its servo
 	// realizes. The motor block sits at a fixed offset by construction (the
@@ -205,13 +204,11 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	// ahead of it, which is why the surface and tilt bases are read back from
 	// the configuration and these are not
 	for (int i = 0; i < NUM_PODS; i++) {
-		const AirshipPod::Drive drive = _pods[i].drive(pod_demand[i], actuator_min(i), actuator_max(i));
-		actuator_sp(i) = drive.thrust;
-		achieved[i] = drive.achieved;
-		held[i] = drive.withheld;
+		pod_drive[i] = _pods[i].drive(pod_demand[i], actuator_min(i), actuator_max(i));
+		actuator_sp(i) = pod_drive[i].thrust;
 	}
 
-	Vector<float, NUM_AXES> achieved_wrench = podWrench(achieved[STARBOARD], achieved[PORT]);
+	Vector<float, NUM_AXES> achieved_wrench = podWrench(pod_drive[STARBOARD].achieved, pod_drive[PORT].achieved);
 
 	if (_has_tail) {
 		// The tail serves the yaw the pods leave. One unit of motor command is
@@ -227,7 +224,7 @@ ActuatorEffectivenessAirship::updateSetpoint(const matrix::Vector<float, NUM_AXE
 	_surface_torque = surface_torque;
 	_demand = demand;
 	_achieved = achieved_wrench;
-	_held = podWrench(held[STARBOARD], held[PORT]);
+	_held = podWrench(pod_drive[STARBOARD].withheld, pod_drive[PORT].withheld);
 }
 
 void
