@@ -78,8 +78,7 @@ void AirshipPod::park(const float dt)
 
 void AirshipPod::slewToTarget(const float dt)
 {
-	if (_slew_rate > 0.f) {
-		_tilt.setSlewRate(_slew_rate);
+	if (_slew_limited) {
 		_tilt.update(_tilt_target, dt);
 
 	} else {
@@ -186,16 +185,11 @@ void AirshipPod::setServoSetpoint(const float servo_sp)
 AirshipPod::Drive AirshipPod::drive(const Vector2f &demand, const float out_min, const float out_max) const
 {
 	const Vector2f axis = thrustAxis();
-	Drive drive{};
 	// non-reversible propeller: reverse only by tilting, the CA_R_REV pod bits are not honored
-	drive.thrust = math::constrain(demand.dot(axis), math::max(out_min, 0.f), out_max);
-	drive.achieved = axis * drive.thrust;
-
-	if (heldByChoice()) {
-		drive.withheld = demand - drive.achieved;
-	}
-
-	return drive;
+	const float thrust = math::constrain(demand.dot(axis), math::max(out_min, 0.f), out_max);
+	const Vector2f achieved = axis * thrust;
+	// the whole residual is withheld by choice, clamp shortfall included
+	return Drive{thrust, achieved, heldByChoice() ? demand - achieved : Vector2f{}};
 }
 
 bool AirshipPod::heldByChoice() const

@@ -40,6 +40,8 @@
 
 #include "airship_att_control.hpp"
 
+#include "airship_manual_input.hpp"
+
 #include <float.h>
 #include <lib/mathlib/mathlib.h>
 #include <px4_platform_common/defines.h>

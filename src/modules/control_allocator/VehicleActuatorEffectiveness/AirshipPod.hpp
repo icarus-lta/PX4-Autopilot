@@ -63,7 +63,7 @@ public:
 	void setTiltRange(float tilt_min, float tilt_max);
 
 	/** Tilt slew rate limit [rad/s]; 0 = unlimited */
-	void setTiltSlewRate(float slew_rate) { _slew_rate = slew_rate; }
+	void setTiltSlewRate(float slew_rate) { _slew_limited = slew_rate > 0.f; _tilt.setSlewRate(slew_rate); }
 
 	bool canTilt() const { return _tilt_max - _tilt_min > kMinTiltSpan; }
 
@@ -133,6 +133,6 @@ private:
 	float _tilt_target{0.f};	///< tilt target the slew tracks [rad]
 	float _tilt_min{0.f};		///< [rad]
 	float _tilt_max{0.f};		///< [rad], >= _tilt_min
-	float _slew_rate{0.f};		///< [rad/s], 0 = unlimited
+	bool _slew_limited{false};	///< false when the configured rate was 0, i.e. unlimited
 	TiltMode _mode{TiltMode::Parked};
 };

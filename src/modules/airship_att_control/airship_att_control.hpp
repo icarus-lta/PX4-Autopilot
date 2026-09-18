@@ -33,8 +33,6 @@
 
 #pragma once
 
-#include "airship_manual_input.hpp"
-
 #include <lib/matrix/matrix/math.hpp>
 #include <lib/rate_control/rate_control.hpp>
 #include <px4_platform_common/module.h>
