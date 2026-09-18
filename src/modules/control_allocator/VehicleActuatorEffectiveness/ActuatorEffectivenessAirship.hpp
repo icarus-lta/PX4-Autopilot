@@ -119,6 +119,14 @@ private:
 	 * small steady torques the integral exists to remove. Three orders above
 	 * the measured noise and an order below the smallest real shortfall the
 	 * tests assert. [normalized torque or thrust]
+	 *
+	 * Applied where a sign is published, and not on the axes a surface
+	 * serves, which publish their magnitude raw. That asymmetry was measured
+	 * rather than assumed: on 2500_generic_airship's shape - fixed mounts, so
+	 * the pod's atan2/cos/sin path carries no rounding at all - a served axis
+	 * publishes exactly zero, and on a tilting airframe with surfaces it
+	 * publishes the demand's own magnitude, three orders above this band.
+	 * Neither lands inside it.
 	 */
 	static constexpr float kShortfallDeadband = 1e-4f;
 
