@@ -87,7 +87,9 @@ param set-default CA_R_REV 4
 
 # No gains are set here on purpose. This vehicle is a seventh of the generic
 # airship's size but its angular acceleration per unit of normalized command
-# comes out the same: 3.93 N m of tail yaw against 5.67 kg m^2 is 0.69 rad/s^2
+# comes out close: 4.48 N m of tail yaw against 5.67 kg m^2 is 0.79 rad/s^2
 # where 54 N m against 76.5 is 0.71, and the pendulum periods match to 5% as
 # well. So rc.airship_defaults' tuning transfers, and a difference in the gate
-# is a difference in the plant rather than in the gains.
+# is a difference in the plant rather than in the gains. The 4.48 is 2.3544 N
+# on a 1.902 m lever, the lever being to the ventral fin root where the
+# classic model puts the yaw thruster.
