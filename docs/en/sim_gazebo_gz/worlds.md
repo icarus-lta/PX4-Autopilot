@@ -43,6 +43,14 @@ It is not recommended as the low frame rate causes segmentation faults on some f
 
 ![screenshot of lawn world](../../assets/simulation/gazebo/worlds/lawn.png)
 
+## LTA {#lta}
+
+The world the [airships](../sim_gazebo_gz/vehicles.md#airship) fly in. It is the default world plus a [Buoyancy](https://gazebosim.org/api/sim/8/classgz_1_1sim_1_1systems_1_1Buoyancy.html) system at an air density of 1.225 kg/m³.
+
+A lighter-than-air vehicle gets all of its weight support that way, and the Buoyancy system lifts only the links a world names in its `<enable>` list, so an airship spawned into any other world has no lift and falls. Adding an airship to another world means adding the plugin to it and listing the model's spawned name, `<model>_<instance>`.
+
+[PX4-gazebo-models/main/worlds/lta.sdf](https://github.com/PX4/PX4-gazebo-models/blob/main/worlds/lta.sdf)
+
 ## Ridge
 
 <Badge type="tip" text="PX4 v1.18" />
@@ -126,4 +134,5 @@ The PX4 toolchain will automatically spawn a world that has the same name as the
 
 The model specific worlds are:
 
+- [LTA world](#lta): Default world plus the Buoyancy system every [airship](../sim_gazebo_gz/vehicles.md#airship) needs to stay up. Selected by the airframes rather than by name-matching.
 - [Aruco world](#aruco): Default world with an [ArUco marker](https://docs.opencv.org/4.13.0/d5/dae/tutorial_aruco_detection.html) that can be used with [x500_mono_cam_down](../sim_gazebo_gz/vehicles.md#x500-quadrotor-with-monocular-camera-down-facing) for testing [precision landing](../advanced_features/precland.md).

@@ -8,7 +8,7 @@ See the [official blog post](https://www.openrobotics.org/blog/2022/4/6/a-new-er
 [Gazebo](https://gazebosim.org/docs/latest/getstarted/) is an open source robotics simulator.
 It supersedes the older [Gazebo Classic](../sim_gazebo_classic/index.md) simulator, and is the only supported version of Gazebo for Ubuntu 22.04 and onwards.
 
-**Supported Vehicles:** Quadrotor, Plane, VTOL, Rover
+**Supported Vehicles:** Quadrotor, Plane, VTOL, Rover, Airship
 
 <lite-youtube videoid="eRzdGD2vgkU" title="PX4 SITL Ignition Gazebo Tunnel Environment"/>
 
@@ -67,6 +67,9 @@ Note that all gazebo make targets have the prefix `gz_`.
 | [Differential Rover](../sim_gazebo_gz/vehicles.md#differential-rover)                                                         | `make px4_sitl gz_rover_differential` | 50000               |
 | [Ackermann Rover](../sim_gazebo_gz/vehicles.md#ackermann-rover)                                                               | `make px4_sitl gz_rover_ackermann`    | 51000               |
 | [Mecanum Rover](../sim_gazebo_gz/vehicles.md#mecanum-rover)                                                                   | `make px4_sitl gz_rover_mecanum`      | 52000               |
+| [Generic Airship (Independent Vectoring)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring)                  | `make px4_sitl gz_airship_vectored_independent` | 2510      |
+| [Generic Airship (Hull Aerodynamics)](../sim_gazebo_gz/vehicles.md#generic-airship-hull-aerodynamics)                         | `make px4_sitl gz_airship_vectored_independent_aero` | 2511 |
+| [Cloudship](../sim_gazebo_gz/vehicles.md#cloudship)                                                                           | `make px4_sitl gz_cloudship`          | 2508                |
 
 All [vehicle models](../sim_gazebo_gz/vehicles.md) (and [worlds](#specify-world)) are included as a submodule from the [Gazebo Models Repository](../sim_gazebo_gz/gazebo_models.md) repository.
 
@@ -177,6 +180,7 @@ The [supported worlds](../sim_gazebo_gz/worlds.md) are listed below.
 | `walls`           | `make px4_sitl *_walls`           | Wall world for testing collision prevention                 |
 | `windy`           | `make px4_sitl *_windy`           | Empty world with wind enabled                               |
 | `moving_platform` | `make px4_sitl *_moving_platform` | World with moving takeoff / landing platform                |
+| `lta`             | `make px4_sitl *_lta`             | Default world plus buoyancy; the airships use it by default |
 
 :::warning
 Note that if no world is specified, PX4 will use the `default` world.

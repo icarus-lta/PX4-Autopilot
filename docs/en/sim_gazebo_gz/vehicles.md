@@ -4,7 +4,7 @@ This topic lists/displays the vehicles supported by the PX4 [Gazebo](../sim_gaze
 
 The models are included in PX4 as a submodule that is fetched from the [Gazebo Models Repository](../sim_gazebo_gz/gazebo_models.md).
 
-Supported vehicle types include: mutirotor, VTOL, Plane, Rover.
+Supported vehicle types include: mutirotor, VTOL, Plane, Rover, Airship.
 
 :::warning
 See [Gazebo Classic Vehicles](../sim_gazebo_classic/vehicles.md) for vehicles that work with the older [Gazebo "Classic" simulation](../sim_gazebo_classic/index.md).
@@ -214,3 +214,31 @@ make px4_sitl gz_rover_mecanum
 ```
 
 ![Mecanum Rover in Gazebo](../../assets/simulation/gazebo/vehicles/rover_mecanum.png)
+
+## Airship
+
+Airships get all of their weight support from the [Buoyancy](https://gazebosim.org/api/sim/8/classgz_1_1sim_1_1systems_1_1Buoyancy.html) system, which is a world plugin, so all three use the [lta world](../sim_gazebo_gz/worlds.md#lta).
+
+### Generic Airship (Independent Vectoring)
+
+[Generic Airship](../frames_airship/index.md) with two independently tilting thrust pods and a rigid hull that meets no air: a torque keeps accelerating it and nothing damps a rotation.
+
+```sh
+make px4_sitl gz_airship_vectored_independent
+```
+
+### Generic Airship (Hull Aerodynamics)
+
+The same vehicle with hull drag and rotational damping. Running an airframe against both separates what the control loop owes to the model from what it owes to itself.
+
+```sh
+make px4_sitl gz_airship_vectored_independent_aero
+```
+
+### Cloudship
+
+[Cloudship](../frames_airship/index.md): collective thrust on one tilt, with a reversible tail thruster for yaw.
+
+```sh
+make px4_sitl gz_cloudship
+```
