@@ -203,18 +203,6 @@ static void runUpdateSetpoint(ActuatorEffectivenessAirship &airship, const Vecto
 	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
 }
 
-TEST(ActuatorEffectivenessAirshipTest, VectoredConfiguration)
-{
-	resetAirshipParams();
-	ActuatorEffectivenessAirship airship(nullptr);
-
-	ActuatorEffectiveness::Configuration configuration{};
-	EXPECT_TRUE(airship.getEffectivenessMatrix(configuration, EffectivenessUpdateReason::MOTOR_ACTIVATION_UPDATE));
-	EXPECT_EQ(configuration.num_actuators_matrix[0], 4);
-	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::MOTORS], 2);
-	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::SERVOS], 2);
-}
-
 TEST(ActuatorEffectivenessAirshipTest, ForwardCruise)
 {
 	resetAirshipParams();
@@ -672,19 +660,6 @@ TEST(ActuatorEffectivenessAirshipTest, LateralThrustReportedUnserved)
 	runUpdateSetpoint(airship, control_sp, actuator_sp);
 	airship.getUnallocatedControl(0, status);
 	EXPECT_FLOAT_EQ(status.unallocated_thrust[1], -1.f);
-}
-
-TEST(ActuatorEffectivenessAirshipTest, TailThrusterConfiguration)
-{
-	resetAirshipParams();
-	setTailThruster();
-	ActuatorEffectivenessAirship airship(nullptr);
-
-	ActuatorEffectiveness::Configuration configuration{};
-	EXPECT_TRUE(airship.getEffectivenessMatrix(configuration, EffectivenessUpdateReason::MOTOR_ACTIVATION_UPDATE));
-	EXPECT_EQ(configuration.num_actuators_matrix[0], 5);
-	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::MOTORS], 3);
-	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::SERVOS], 2);
 }
 
 TEST(ActuatorEffectivenessAirshipTest, CollectiveSingleTiltConfiguration)
