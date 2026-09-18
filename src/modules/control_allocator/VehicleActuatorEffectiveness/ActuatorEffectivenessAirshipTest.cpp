@@ -606,8 +606,6 @@ TEST(ActuatorEffectivenessAirshipTest, MotorLimitRespected)
 {
 	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
-	declareActuators(airship);
-
 	Vector<float, 6> control_sp{};
 	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
 	ActuatorEffectiveness::ActuatorVector actuator_sp{};
@@ -814,8 +812,6 @@ TEST(ActuatorEffectivenessAirshipTest, AsymmetricTiltRange)
 	setCollectiveMode();
 	setTailThruster();
 	ActuatorEffectivenessAirship airship(nullptr);
-	declareActuators(airship);
-
 	ActuatorEffectiveness::ActuatorVector actuator_min{};
 	actuator_min.setAll(0.f);
 	actuator_min(MOTOR_TAIL) = -1.f;
@@ -927,6 +923,8 @@ TEST(ActuatorEffectivenessAirshipTest, UnrealizableDemandDoesNotSweepTheTiltToAn
 // layout the effectiveness really declares, in every shape the suite uses
 static void expectDeclaredLayout(bool tail, int num_surfaces, int num_tilts)
 {
+	SCOPED_TRACE(::testing::Message() << "tail=" << tail << " surfaces=" << num_surfaces
+		     << " tilts=" << num_tilts);
 	ActuatorEffectivenessAirship airship(nullptr);
 	const ActuatorEffectiveness::Configuration configuration = declareActuators(airship);
 	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::MOTORS], numMotors(tail));
@@ -1337,6 +1335,7 @@ TEST(ActuatorEffectivenessAirshipTest, RearDemandNoiseKeepsChosenEnd)
 	// Perpendicular noise flips the sign of the small fz component: the
 	// committed end must hold, not swing across the whole range
 	for (int step = -2; step <= 2; step++) {
+		SCOPED_TRACE(::testing::Message() << "step=" << step);
 		control_sp(ActuatorEffectiveness::ControlAxis::ROLL) = 0.05f * AirshipPod::kEndSwitchMargin * step;
 		runUpdateSetpoint(airship, control_sp, actuator_sp);
 		EXPECT_FLOAT_EQ(actuator_sp(TILT_STARBOARD), 1.f);
@@ -1372,8 +1371,6 @@ TEST(ActuatorEffectivenessAirshipTest, TiltServoLimitBoundsProjection)
 {
 	resetAirshipParams();
 	ActuatorEffectivenessAirship airship(nullptr);
-	declareActuators(airship);
-
 	ActuatorEffectiveness::ActuatorVector actuator_min{};
 	actuator_min.setAll(-1.f);
 	actuator_min(MOTOR_STARBOARD) = 0.f;
@@ -1564,8 +1561,6 @@ TEST(ActuatorEffectivenessAirshipTest, CollectiveClampedServoRealizedCopy)
 	resetAirshipParams();
 	setCollectiveMode();
 	ActuatorEffectivenessAirship airship(nullptr);
-	declareActuators(airship);
-
 	ActuatorEffectiveness::ActuatorVector actuator_min{};
 	actuator_min.setAll(-1.f);
 	actuator_min(MOTOR_STARBOARD) = 0.f;

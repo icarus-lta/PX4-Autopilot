@@ -145,6 +145,7 @@ TEST(AirshipPodTest, RearConeNoiseKeepsTheCommittedEnd)
 
 	// Perpendicular noise inside the cone must not flip across the range
 	for (const float up : {0.02f, -0.02f, 0.02f}) {
+		SCOPED_TRACE(::testing::Message() << "up=" << up);
 		full.steer(force(-1.f, up), kDt);
 		EXPECT_FLOAT_EQ(full.tilt(), M_PI_F);
 	}
@@ -455,7 +456,7 @@ TEST(AirshipPodTest, MarginBoundsEverySweepAndEveryHold)
 
 		if (end_switch || cone_across || fabsf(target - committed) > M_PI_F) {
 			sweeps++;
-			EXPECT_GT(realized(demand, target), realized(demand, committed) + margin - 1e-5f)
+			ASSERT_GT(realized(demand, target), realized(demand, committed) + margin - 1e-5f)
 					<< "unpaid sweep, sample " << i << ": range " << lo_deg << ".." << hi_deg
 					<< " deg, demand (" << demand(0) << ", " << demand(1) << "), "
 					<< math::degrees(committed) << " -> " << math::degrees(target) << " deg";
@@ -475,14 +476,14 @@ TEST(AirshipPodTest, MarginBoundsEverySweepAndEveryHold)
 			best = fmaxf(best, demand.norm());
 		}
 
-		EXPECT_LE(best - realized(demand, target), owed + 1e-5f)
+		ASSERT_LE(best - realized(demand, target), owed + 1e-5f)
 				<< "left on the table, sample " << i << ": range " << lo_deg << ".." << hi_deg
 				<< " deg, demand (" << demand(0) << ", " << demand(1) << "), "
 				<< math::degrees(committed) << " -> " << math::degrees(target) << " deg";
 
 		// A constant demand is a fixed point
 		sampled.steer(demand, kDt);
-		EXPECT_FLOAT_EQ(sampled.tilt(), target);
+		ASSERT_FLOAT_EQ(sampled.tilt(), target);
 	}
 
 	EXPECT_GT(sweeps, 1000) << "the sample must actually exercise sweeps";
