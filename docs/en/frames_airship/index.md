@@ -25,4 +25,6 @@ The frame configurations are shown in [Airframes Reference > Airship](../airfram
 
 Running the vectored airframe against both of its models separates what the control loop owes to the model from what it owes to itself.
 
+All three airframes default to the `lta` world. A lighter-than-air vehicle gets all of its weight support from the [Buoyancy](https://gazebosim.org/api/sim/8/classgz_1_1sim_1_1systems_1_1Buoyancy.html) system, which is a world plugin and which lifts only the links a world names, so the world-qualified targets the build generates for every other world — `gz_cloudship_baylands` and the like — spawn an airship with no lift, and it falls. Adding an airship to another world means adding the plugin to it and listing the model's spawned name, `<model>_<instance>`, in its `<enable>` list.
+
 The Cloudship also has an older [Gazebo Classic](../sim_gazebo_classic/index.md) model, which uses a different allocation and is not kept in step with the flight airframe.
