@@ -17,14 +17,12 @@ The frame configurations are shown in [Airframes Reference > Airship](../airfram
 
 ## Simulation
 
-[Gazebo](../sim_gazebo_gz/index.md) models are provided for the independently vectored airship and for the Cloudship:
+PX4 provides synthetic simulation models for [Gazebo](../sim_gazebo_gz/index.md) of both airships, the vectored one in two forms:
 
-- `make px4_sitl gz_airship_vectored_independent` — rigid hull, no aerodynamic forces.
-- `make px4_sitl gz_airship_vectored_independent_aero` — the same vehicle with hull drag and rotational damping.
-- `make px4_sitl gz_cloudship` — collective thrust on one tilt, with a reversible tail thruster for yaw.
+- [Generic Airship (Independent Vectoring)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring)
+- [Generic Airship (Hull Aerodynamics)](../sim_gazebo_gz/vehicles.md#generic-airship-hull-aerodynamics)
+- [Cloudship](../sim_gazebo_gz/vehicles.md#cloudship)
 
 Running the vectored airframe against both of its models separates what the control loop owes to the model from what it owes to itself.
-
-All three airframes default to the `lta` world. A lighter-than-air vehicle gets all of its weight support from the [Buoyancy](https://gazebosim.org/api/sim/8/classgz_1_1sim_1_1systems_1_1Buoyancy.html) system, which is a world plugin and which lifts only the links a world names, so the world-qualified targets the build generates for every other world — `gz_cloudship_baylands` and the like — spawn an airship with no lift, and it falls. Adding an airship to another world means adding the plugin to it and listing the model's spawned name, `<model>_<instance>`, in its `<enable>` list.
 
 The Cloudship also has an older [Gazebo Classic](../sim_gazebo_classic/index.md) model, which uses a different allocation and is not kept in step with the flight airframe.
