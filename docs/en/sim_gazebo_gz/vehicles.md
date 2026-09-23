@@ -235,7 +235,7 @@ Regress the allocator on the rigid hull; tune the loop on the complete one.
 make px4_sitl gz_airship_vectored_independent
 ```
 
-### Generic Airship (Hull Drag)
+### Generic Airship (Independent Vectoring, Hull Drag)
 
 The same vehicle with hull drag and rotational damping.
 

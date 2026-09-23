@@ -65,6 +65,13 @@ px4_add_romfs_files(
 	1062_flightgear_tf-r1
 	1070_gazebo-classic_boat
 
+	# Airship gz decades: the decade is the vehicle, a gz member's ones digit
+	# is its physics mask (1 hull drag, 2 fins, 4 added mass, summed). 2500 and
+	# 2507 are the flight numbers of upstream's generic airship and Cloudship,
+	# and 2507 here is the gazebo-classic Cloudship, so the gz families take:
+	#   2510 airship_vectored_independent (shares its flight number)
+	#   2520 cloudship
+	#   2530 airship_fixed (reserved: the 2500 airframe's gz twin, no model yet)
 	2507_gazebo-classic_cloudship
 	2510_gz_airship_vectored_independent
 	2511_gz_airship_vectored_independent_drag

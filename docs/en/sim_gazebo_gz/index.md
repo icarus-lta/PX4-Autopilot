@@ -68,7 +68,7 @@ Note that all gazebo make targets have the prefix `gz_`.
 | [Ackermann Rover](../sim_gazebo_gz/vehicles.md#ackermann-rover)                                                               | `make px4_sitl gz_rover_ackermann`                   | 51000 |
 | [Mecanum Rover](../sim_gazebo_gz/vehicles.md#mecanum-rover)                                                                   | `make px4_sitl gz_rover_mecanum`                     | 52000 |
 | [Generic Airship (Independent Vectoring)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring)                 | `make px4_sitl gz_airship_vectored_independent`      | 2510  |
-| [Generic Airship (Hull Drag)](../sim_gazebo_gz/vehicles.md#generic-airship-hull-drag)                                         | `make px4_sitl gz_airship_vectored_independent_drag` | 2511  |
+| [Generic Airship (Independent Vectoring, Hull Drag)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-hull-drag)                                         | `make px4_sitl gz_airship_vectored_independent_drag` | 2511  |
 | [Cloudship](../sim_gazebo_gz/vehicles.md#cloudship)                                                                           | `make px4_sitl gz_cloudship`                         | 2520  |
 | [Cloudship (Hull Drag)](../sim_gazebo_gz/vehicles.md#cloudship-hull-drag)                                                     | `make px4_sitl gz_cloudship_drag`                    | 2521  |
 | [Cloudship (Fins)](../sim_gazebo_gz/vehicles.md#cloudship-fins)                                                               | `make px4_sitl gz_cloudship_fin`                     | 2522  |
