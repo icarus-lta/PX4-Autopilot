@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+# @name Cloudship (gz, Complete)
+#
+# @type Airship
+# @class Airship
+#
+# @maintainer Hyunduk Shin <hyunduk@icarus-airship.com>
+#
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=cloudship_am_fin_drag}
+
+# The 2520 vehicle with everything: added mass, fin lift, hull drag and
+# rotational damping. The plant to tune the yaw loop against; 2520 is the one
+# to regress the allocator against. Ones digit 7 = 4 + 2 + 1.
+. ${R}etc/init.d-posix/airframes/2520_gz_cloudship

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# @name Generic Airship (Independent Vectoring, Hull Aerodynamics)
+# @name Generic Airship (Independent Vectoring, Hull Drag)
 #
 # @type Airship
 # @class Airship
@@ -8,10 +8,12 @@
 # @maintainer Hyunduk Shin <hyunduk@icarus-airship.com>
 #
 
-PX4_SIM_MODEL=${PX4_SIM_MODEL:=airship_vectored_independent_aero}
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=airship_vectored_independent_drag}
 
 # The 2510 vehicle in a gz model that gives the hull quadratic drag and
 # rotational damping. Same airframe, same control code, a damped plant: run
-# both to see what the loop owes to the model and what to itself.
+# both to see what the loop owes to the model and what to itself. The ones
+# digit is the physics mask the gz airship numbers share (2510/2511,
+# 2520-2527): 1 for drag.
 
 . ${R}etc/init.d-posix/airframes/2510_gz_airship_vectored_independent

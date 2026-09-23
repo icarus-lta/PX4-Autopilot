@@ -15,10 +15,14 @@
 
 . ${R}etc/init.d/rc.airship_defaults
 
-# The same vehicle as 2507 on the flight side, in gz. It is 2508 and not 2507
-# because 2507 in this directory is upstream's gazebo-classic build of the
-# same airship, which this does not touch; the two simulators sit next to
-# each other and only the flight airframe has one number.
+# The same vehicle as 2507 on the flight side, in gz. It is not 2507 because
+# 2507 in this directory is upstream's gazebo-classic build of the same
+# airship, which this does not touch; the two simulators sit next to each
+# other and only the flight airframe has one number. The gz Cloudship takes
+# the 2520 decade instead, one number per physics variant of the model: the
+# ones digit is what the plant carries, 1 for hull drag, 2 for fin lift, 4
+# for fluid added mass, summed. This one is the rigid hull, buoyancy and
+# nothing else fluid, the plant to regress the allocator against.
 
 param set-default COM_PREARM_MODE 2
 
