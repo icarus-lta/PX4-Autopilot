@@ -66,9 +66,14 @@ px4_add_romfs_files(
 	1070_gazebo-classic_boat
 
 	2507_gazebo-classic_cloudship
-	2508_gz_cloudship
 	2510_gz_airship_vectored_independent
-	2511_gz_airship_vectored_independent_aero
+	2511_gz_airship_vectored_independent_drag
+	2520_gz_cloudship
+	2521_gz_cloudship_drag
+	2522_gz_cloudship_fin
+	2524_gz_cloudship_am
+	2526_gz_cloudship_am_fin
+	2527_gz_cloudship_am_fin_drag
 
 	3010_jsbsim_quadrotor_x
 	3011_jsbsim_hexarotor_x

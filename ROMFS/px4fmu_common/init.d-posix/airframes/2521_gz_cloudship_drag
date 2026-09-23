@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+# @name Cloudship (gz, Hull Drag)
+#
+# @type Airship
+# @class Airship
+#
+# @maintainer Hyunduk Shin <hyunduk@icarus-airship.com>
+#
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=cloudship_drag}
+
+# The 2520 vehicle in a gz model that gives the hull quadratic drag and
+# rotational damping and nothing else. Same airframe, same control code, a
+# damped plant; the ones digit 1 is the drag bit of the physics mask.
+. ${R}etc/init.d-posix/airframes/2520_gz_cloudship
