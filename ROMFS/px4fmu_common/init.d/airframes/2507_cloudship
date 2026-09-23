@@ -29,3 +29,12 @@ param set-default CA_AIRSHIP_TLMAX 90
 param set-default CA_AIRSHIP_TLT_R 120
 
 param set-default CA_R_REV 4
+
+# Set THR_MDL_FAC from the measured thrust curve before trusting the yaw
+# gains. The SITL twin (2508_gz_cloudship) sets THR_MDL_FAC 1 because the gz
+# motor model is exactly quadratic in rotor speed, which makes thrust linear
+# in the command there, and every SITL gate result and the AS_YAWRATE_*
+# defaults it confirmed stand on that linear plant. This file leaves the
+# parameter at its default of 0, so on the vehicle the ESC and prop curve is
+# whatever it is, and a unit of yaw command buys less thrust at low throttle
+# than the gains were tuned for. Measure the curve, set the factor, retune.
