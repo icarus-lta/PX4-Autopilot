@@ -217,7 +217,15 @@ make px4_sitl gz_rover_mecanum
 
 ## Airship
 
-Airships get all of their weight support from the [Buoyancy](https://gazebosim.org/api/sim/8/classgz_1_1sim_1_1systems_1_1Buoyancy.html) system, which is a world plugin, so all three use the [lta world](../sim_gazebo_gz/worlds.md#lta).
+Airships get all of their weight support from the [Buoyancy](https://gazebosim.org/api/sim/8/classgz_1_1sim_1_1systems_1_1Buoyancy.html) system, which is a world plugin, so all of them use the [lta world](../sim_gazebo_gz/worlds.md#lta).
+
+Each airship is a family of models named by the fluid physics they carry, in a fixed order: `<vehicle>[_am][_fin][_drag]`.
+The bare name is the rigid hull with buoyancy and nothing else, `_am` adds the hull's fluid added mass, `_fin` adds fin lift, and `_drag` adds hull drag and rotational damping.
+Every variant except `_am` is a thin merge include of the model with one token fewer, so the vehicle body is written once, plus the `_am` copy, which `<fluid_added_mass>` forces because it lives in the link's inertial and a merge include can only add elements.
+The airframe number's ones digit is a mask of the physics the model carries: 1 for drag, 2 for fins, 4 for added mass, summed.
+
+Running one control loop against several plants separates what it owes to the model from what it owes to itself.
+Regress the allocator on the rigid hull; tune the loop on the complete one.
 
 ### Generic Airship (Independent Vectoring)
 
@@ -227,18 +235,62 @@ Airships get all of their weight support from the [Buoyancy](https://gazebosim.o
 make px4_sitl gz_airship_vectored_independent
 ```
 
-### Generic Airship (Hull Aerodynamics)
+### Generic Airship (Hull Drag)
 
-The same vehicle with hull drag and rotational damping. Running an airframe against both separates what the control loop owes to the model from what it owes to itself.
+The same vehicle with hull drag and rotational damping.
 
 ```sh
-make px4_sitl gz_airship_vectored_independent_aero
+make px4_sitl gz_airship_vectored_independent_drag
 ```
 
 ### Cloudship
 
 [Cloudship](../frames_airship/index.md): collective thrust on one tilt, with a reversible tail thruster for yaw.
+The rigid hull.
 
 ```sh
 make px4_sitl gz_cloudship
+```
+
+### Cloudship (Hull Drag)
+
+The same vehicle with hull drag and rotational damping.
+
+```sh
+make px4_sitl gz_cloudship_drag
+```
+
+### Cloudship (Fins)
+
+The same vehicle with its four fins as lifting surfaces, isolated from the other physics so that their contribution can be measured on its own.
+
+```sh
+make px4_sitl gz_cloudship_fin
+```
+
+### Cloudship (Added Mass)
+
+The same vehicle with the hull's fluid added mass.
+The physics engine folds added mass into the spatial inertia, Coriolis terms included, so this plant carries the Munk moment: a hull slipping sideways is turned further sideways, and nothing in this model opposes it.
+It exists to measure that term on its own.
+
+```sh
+make px4_sitl gz_cloudship_am
+```
+
+### Cloudship (Added Mass, Fins)
+
+Added mass and fin lift together, the Munk moment and the one thing on this hull that opposes it, with no drag.
+
+```sh
+make px4_sitl gz_cloudship_am_fin
+```
+
+### Cloudship (Complete)
+
+Everything: added mass, fin lift, hull drag and rotational damping.
+This is the plant to tune the yaw loop against.
+
+```sh
+make px4_sitl gz_cloudship_am_fin_drag
 ```
