@@ -15,11 +15,13 @@
 
 . ${R}etc/init.d/rc.airship_defaults
 
-# The same vehicle as 2507 on the flight side, in gz. It is not 2507 because
-# 2507 in this directory is upstream's gazebo-classic build of the same
-# airship, which this does not touch; the two simulators sit next to each
-# other and only the flight airframe has one number. The gz Cloudship takes
-# the 2520 decade instead, one number per physics variant of the model: the
+# The same vehicle as 2507 on the flight side, in gz. The airship SITL block
+# gives each vehicle a decade, in the order of the flight numbers: 2500 the
+# generic airship, 2510 the Cloudship, 2520 the independently vectored one.
+# 2507 could not be the gz Cloudship's number because it shares the generic
+# airship's decade, whose ones digits are that family's physics variants; the
+# gazebo-classic Cloudship that used to sit at 2507 is now 2519, in this
+# decade, where ones digit 9 means the classic twin. Within the decade the
 # ones digit is what the plant carries, 1 for hull drag, 2 for fin lift, 4
 # for fluid added mass, summed. This one is the rigid hull, buoyancy and
 # nothing else fluid, the plant to regress the allocator against.

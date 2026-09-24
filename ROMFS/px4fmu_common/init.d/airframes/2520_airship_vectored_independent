@@ -32,6 +32,6 @@ param set-default CA_AIRSHIP_TLT_R 120
 # Set THR_MDL_FAC from the measured thrust curve; the AS_YAWRATE_* defaults
 # were tuned in the gz airship_vectored_independent model with THR_MDL_FAC 1,
 # whose hull meets no air at all: retune them on the vehicle. The
-# airship_vectored_independent_drag model (airframe 2511) adds hull drag and
+# airship_vectored_independent_drag model (airframe 2521) adds hull drag and
 # rotational damping, but not added mass, and the defaults were not retuned
 # against it
