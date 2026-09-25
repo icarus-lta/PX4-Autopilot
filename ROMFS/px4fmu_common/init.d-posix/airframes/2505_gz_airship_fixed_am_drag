@@ -10,8 +10,4 @@
 
 PX4_SIM_MODEL=${PX4_SIM_MODEL:=airship_fixed_am_drag}
 
-# The 2500 vehicle with everything its hull has: added mass, hull drag and
-# rotational damping, the fins being the actuators. The plant to tune the
-# loops against; 2500 is the one to regress the allocator against. Ones
-# digit 5 = 4 + 1.
 . ${R}etc/init.d-posix/airframes/2500_gz_airship_fixed

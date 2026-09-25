@@ -10,9 +10,4 @@
 
 PX4_SIM_MODEL=${PX4_SIM_MODEL:=airship_vectored_independent_am}
 
-# The 2520 vehicle with the hull's fluid added mass and nothing else. The
-# engine folds added mass into the spatial inertia, Coriolis terms and all,
-# so this plant carries the Munk moment: a hull that slips sideways is turned
-# further sideways, and nothing here opposes it. It exists to measure that
-# term on its own. Ones digit 4: the added-mass bit.
 . ${R}etc/init.d-posix/airframes/2520_gz_airship_vectored_independent

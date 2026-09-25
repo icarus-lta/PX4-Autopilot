@@ -10,7 +10,4 @@
 
 PX4_SIM_MODEL=${PX4_SIM_MODEL:=airship_vectored_independent_am_fin_drag}
 
-# The 2520 vehicle with everything: added mass, fin lift, hull drag and
-# rotational damping. The plant to tune the loops against; 2520 is the one
-# to regress the allocator against. Ones digit 7 = 4 + 2 + 1.
 . ${R}etc/init.d-posix/airframes/2520_gz_airship_vectored_independent
