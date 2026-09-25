@@ -712,10 +712,15 @@ parameters:
                   Fraction of the control-surface torque allocation that is
                   trusted to be aerodynamically delivered; the pods and the
                   tail serve the rest of the demand. At 1 the surfaces serve
-                  their axes alone. At 0 they still deflect, but the
+                  their axes alone up to their travel, and the pods and the
+                  tail get only what saturated surfaces cannot deliver. At 0
+                  they still deflect, but the
                   pods serve the whole demand, which restores yaw
                   authority in hover, where still-air surfaces produce no
-                  torque.
+                  torque. With yaw surfaces, the airship controller closes
+                  its yaw rate loop only below 1, and the pods or the tail
+                  then get the uncredited share of what it asks for: close
+                  to 1 that share leaves the loop little authority at rest.
             type: float
             decimal: 2
             min: 0.0
