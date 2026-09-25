@@ -91,11 +91,10 @@ param set-default CA_AIRSHIP_TLT_R 120
 
 param set-default CA_R_REV 4
 
-# No gains are set here on purpose. This vehicle is a seventh of the generic
-# airship's size but its angular acceleration per unit of normalized command
-# comes out close: 4.48 N m of tail yaw against 5.67 kg m^2 is 0.79 rad/s^2
-# where 54 N m against 76.5 is 0.71, and the pendulum periods match to 5% as
-# well. So the AS_YAWRATE_* defaults transfer, and a difference in the gate is
-# a difference in the plant rather than in the gains. The 4.48 is 2.3544 N on
-# a 1.902 m lever, the lever being to the ventral fin root where the classic
-# model puts the yaw thruster.
+# No gains are set here on purpose: the AS_YAWRATE_* defaults stay, and the
+# SITL gate on this plant passes with them. For scale, 4.48 N m of tail yaw
+# against 5.67 kg m^2 is 0.79 rad/s^2 per unit of normalized command. The
+# generic airship the defaults were tuned on had 54 N m against 76.5 kg m^2
+# then, 0.71; with its tail sized it has 108.8 kg m^2, 0.50. The 4.48 is
+# 2.3544 N on a 1.902 m lever, the lever being to the ventral fin root where
+# the classic model puts the yaw thruster.
