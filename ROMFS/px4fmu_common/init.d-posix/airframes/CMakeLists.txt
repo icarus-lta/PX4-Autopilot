@@ -71,9 +71,13 @@ px4_add_romfs_files(
 	# 2507 are the flight numbers of upstream's generic airship and Cloudship;
 	# the Cloudship's gz decade cannot be 2500's, so it is the next one, and the
 	# classic Cloudship moved from 2507 into it at 2519.
-	#   2500 airship_fixed (reserved: the 2500 airframe's gz twin, no model yet)
+	#   2500 airship_fixed (the 2500 airframe itself: fixed thrusters, fin flaps)
 	#   2510 cloudship
 	#   2520 airship_vectored_independent (shares its flight number)
+	2500_gz_airship_fixed
+	2501_gz_airship_fixed_drag
+	2504_gz_airship_fixed_am
+	2505_gz_airship_fixed_am_drag
 	2510_gz_cloudship
 	2511_gz_cloudship_drag
 	2512_gz_cloudship_fin
@@ -83,6 +87,10 @@ px4_add_romfs_files(
 	2519_gazebo-classic_cloudship
 	2520_gz_airship_vectored_independent
 	2521_gz_airship_vectored_independent_drag
+	2522_gz_airship_vectored_independent_fin
+	2524_gz_airship_vectored_independent_am
+	2526_gz_airship_vectored_independent_am_fin
+	2527_gz_airship_vectored_independent_am_fin_drag
 
 	3010_jsbsim_quadrotor_x
 	3011_jsbsim_hexarotor_x
