@@ -144,24 +144,82 @@ TEST(AirshipManualInputTest, LoopClosesInManualRateModes)
 	vehicle_control_mode_s mode{};
 	mode.flag_control_manual_enabled = true;
 	mode.flag_control_rates_enabled = true;
-	EXPECT_TRUE(yawRateLoopActive(mode, true)); // Acro
+	EXPECT_TRUE(yawRateLoopActive(mode, true, true)); // Acro
 
 	// Stabilized (and Altitude, Position): no heading loop exists yet, so
 	// the stick still feeds the rate loop
 	mode.flag_control_attitude_enabled = true;
-	EXPECT_TRUE(yawRateLoopActive(mode, true));
+	EXPECT_TRUE(yawRateLoopActive(mode, true, true));
 }
 
 TEST(AirshipManualInputTest, LoopStaysOpenWithoutRatesOrPilot)
 {
 	vehicle_control_mode_s mode{};
 	mode.flag_control_manual_enabled = true;
-	EXPECT_FALSE(yawRateLoopActive(mode, true)); // Manual: rates off, torque passthrough
+	EXPECT_FALSE(yawRateLoopActive(mode, true, true)); // Manual: rates off, torque passthrough
 
 	mode.flag_control_rates_enabled = true;
 	mode.flag_control_manual_enabled = false;
-	EXPECT_FALSE(yawRateLoopActive(mode, true)); // Hold, Land, Descend: manual input not mixed in
+	EXPECT_FALSE(yawRateLoopActive(mode, true, true)); // Hold, Land, Descend: manual input not mixed in
 
 	mode.flag_control_manual_enabled = true;
-	EXPECT_FALSE(yawRateLoopActive(mode, false)); // disarmed or lost sticks
+	EXPECT_FALSE(yawRateLoopActive(mode, false, true)); // disarmed or lost sticks
+}
+
+TEST(AirshipManualInputTest, SurfaceOnlyYawKeepsTheStickAsTorque)
+{
+	// Collective pods, no tail: yaw is the rudders', which need airspeed
+	vehicle_control_mode_s mode{};
+	mode.flag_control_manual_enabled = true;
+	mode.flag_control_rates_enabled = true;
+	EXPECT_FALSE(yawRateLoopActive(mode, true, false)); // Acro
+
+	mode.flag_control_attitude_enabled = true;
+	EXPECT_FALSE(yawRateLoopActive(mode, true, false)); // Stabilized
+}
+
+TEST(AirshipManualInputTest, PropulsiveYawFromPodsOrTail)
+{
+	// the airship allocator, no yaw surfaces
+	EXPECT_FALSE(propulsiveYaw(kAirshipAllocator, 0, 0, false, 1.f));	// collective, no tail
+	EXPECT_TRUE(propulsiveYaw(kAirshipAllocator, 1, 0, false, 1.f));	// independent pods: 2520
+	EXPECT_TRUE(propulsiveYaw(kAirshipAllocator, 0, 1, false, 1.f));	// a tail thruster: 2507
+	EXPECT_TRUE(propulsiveYaw(kAirshipAllocator, 2, 0, false, 1.f));	// the allocator reads any GRP > 0 as independent
+}
+
+TEST(AirshipManualInputTest, CreditedYawSurfacesKeepTheLoopOpen)
+{
+	// rudders credited in full carry the yaw first; the pods and the tail get only what they cannot deliver
+	EXPECT_FALSE(propulsiveYaw(kAirshipAllocator, 0, 0, true, 1.f));	// 2500: collective pods, rudders
+	EXPECT_FALSE(propulsiveYaw(kAirshipAllocator, 1, 0, true, 1.f));	// independent pods with rudders at CS_K 1
+	EXPECT_FALSE(propulsiveYaw(kAirshipAllocator, 0, 1, true, 1.f));	// a tail with rudders at CS_K 1
+	EXPECT_TRUE(propulsiveYaw(kAirshipAllocator, 1, 0, true, 0.5f));	// half the yaw left to the pods
+	EXPECT_FALSE(propulsiveYaw(kAirshipAllocator, 0, 0, true, 0.5f));	// nothing to leave it to
+}
+
+TEST(AirshipManualInputTest, YawSurfacesAsTheAllocatorSeesThem)
+{
+	const int32_t rudders[2] {4, 4};
+	const float half[2] {0.5f, 0.5f};
+	EXPECT_TRUE(yawSurfaces(2, rudders, half));		// the 2500 pair
+	EXPECT_FALSE(yawSurfaces(0, rudders, half));		// no surfaces configured
+
+	const float reversed[2] {-0.5f, 0.f};
+	EXPECT_TRUE(yawSurfaces(2, rudders, reversed));		// a rudder reversed through its sign
+
+	const float small[2] {0.05f, -0.04f};
+	EXPECT_FALSE(yawSurfaces(2, rudders, small));		// every entry <= 0.05: the allocator drops the row
+
+	const int32_t flaps[2] {9, 11};
+	EXPECT_FALSE(yawSurfaces(2, flaps, half));		// a flap and an airbrake get no torque
+
+	const int32_t elevators[2] {3, 3};
+	const float none[2] {0.f, 0.f};
+	EXPECT_FALSE(yawSurfaces(2, elevators, none));		// elevators only
+}
+
+TEST(AirshipManualInputTest, OtherAllocatorsKeepTheLoop)
+{
+	// the gazebo-classic Cloudship: custom rotors (CA_AIRFRAME 9), a tail rotor among them
+	EXPECT_TRUE(propulsiveYaw(9, 0, 0, false, 1.f));
 }

@@ -101,17 +101,88 @@ inline bool manualInputUsable(const vehicle_control_mode_s &control_mode, const 
 	return control_mode.flag_armed && sticks.valid;
 }
 
+/** CA_AIRFRAME value of the airship allocator, the one whose parameters propulsiveYaw() reads */
+static constexpr int32_t kAirshipAllocator = 16;
+
+/** Largest number of control surfaces (CA_SV_CS_COUNT) */
+static constexpr int kMaxControlSurfaces = 8;
+
+/**
+ * Whether the control surfaces take yaw in the allocator, from their
+ * CA_SV_CSn_TYPE and CA_SV_CSn_TRQ_Y: the allocator gives flaps, airbrakes,
+ * the steering wheel and spoilers no torque whatever their TRQ parameters say
+ * (ActuatorEffectivenessControlSurfaces), and it drops an axis whose every
+ * entry is at most 0.05 (ControlAllocator), so the yaw row survives only if
+ * a surface of another type has a yaw entry above that. The pseudo-inverse's
+ * dependent-axis drop is not mirrored: a yaw row that only repeats a roll or
+ * pitch row still counts here, which keeps the loop open and the stick as
+ * torque on such an airframe.
+ */
+inline bool yawSurfaces(int count, const int32_t types[], const float yaw_torques[])
+{
+	bool any = false;
+
+	for (int i = 0; i < count && i < kMaxControlSurfaces; i++) {
+		const bool no_torque = types[i] == 9 || types[i] == 10	// left, right flap
+				       || types[i] == 11			// airbrake
+				       || types[i] == 16			// steering wheel
+				       || types[i] == 17 || types[i] == 18;	// left, right spoiler
+
+		if (!no_torque && fabsf(yaw_torques[i]) > 0.05f) {
+			any = true;
+		}
+	}
+
+	return any;
+}
+
+/**
+ * Whether the propulsion gets yaw torque to make at rest, read from the
+ * airship allocator's configuration (CA_AIRFRAME Airship): independently
+ * driven pods (CA_AIRSHIP_GRP above 0, the allocator's own test) or a tail
+ * thruster (CA_AIRSHIP_TAIL), with the yaw not all taken by control surfaces
+ * (yawSurfaces() above). The pods and the tail serve only what the credited
+ * surfaces leave. With yaw surfaces at the default CA_AIRSHIP_CS_K of 1 that
+ * is only the yaw beyond what the surfaces deliver at full deflection, so the
+ * surfaces carry the yaw first and the loop stays open as on surfaces alone;
+ * surfaces too small for the stick's range leave the rest to the pods as
+ * stick torque. Below 1 the pods get the uncredited share of the yaw the
+ * loop asks for, and a small share leaves the loop little authority at rest,
+ * where its integrator then winds with no shortfall reported. Any other allocator keeps the loop: these parameters do
+ * not describe its propulsion (the gazebo-classic Cloudship's custom rotor
+ * set, a tail rotor among them).
+ */
+inline bool propulsiveYaw(int32_t allocator, int32_t pod_grouping, int32_t tail, bool yaw_surfaces,
+			  float surface_credit)
+{
+	if (allocator != kAirshipAllocator) {
+		return true;
+	}
+
+	return (pod_grouping > 0 || tail != 0) && !(yaw_surfaces && surface_credit >= 1.f);
+}
+
 /**
  * Whether the yaw rate loop closes on the stick: usable manual input
  * (manualInputUsable() above, passed by the caller) in a manual mode with rate control
- * (Acro, Stabilized, Altitude, Position). Manual has rates off and the
- * non-manual modes have no setpoint source here yet; both keep the torque
- * passthrough. Disarmed or with the sticks lost the loop stays open, so it
- * cannot overwrite the zeroed torque or wind up.
+ * (Acro, Stabilized, Altitude, Position), on an airframe whose propulsion makes
+ * yaw (propulsiveYaw() above). Manual has rates off and the non-manual modes
+ * have no setpoint source here yet; both keep the torque passthrough.
+ * Disarmed or with the sticks lost the loop stays open, so it cannot overwrite
+ * the zeroed torque or wind up.
+ *
+ * An airframe whose yaw comes from control surfaces alone keeps the stick as
+ * torque in every mode, as fixed-wing Acro does by default (FW_ACRO_YAW_EN).
+ * The loop has no airspeed scaling: at rest its integrator would wind to
+ * AS_YR_INT_LIM with no shortfall reported, since the surfaces do not
+ * saturate, and hold that rudder after the stick is released, and in any mode
+ * it would cap the normalized yaw torque at AS_YAWRATE_P times AS_YAWRATE_MAX
+ * (in rad/s) plus AS_YR_INT_LIM.
  */
-inline bool yawRateLoopActive(const vehicle_control_mode_s &control_mode, bool manual_input_usable)
+inline bool yawRateLoopActive(const vehicle_control_mode_s &control_mode, bool manual_input_usable,
+			      bool propulsive_yaw)
 {
-	return manual_input_usable && control_mode.flag_control_manual_enabled
+	return manual_input_usable && propulsive_yaw && control_mode.flag_control_manual_enabled
 	       && control_mode.flag_control_rates_enabled;
 }
 
