@@ -12,6 +12,6 @@ PX4_SIM_MODEL=${PX4_SIM_MODEL:=cloudship_am_fin}
 
 # The 2510 vehicle with fluid added mass and its fins lifting: the pair that
 # belongs together, the Munk moment and the only thing on this hull that
-# opposes it. No drag, so every rate this plant reaches it keeps. Ones digit
-# 6 = 4 + 2.
+# opposes it. No hull drag, so the fins are all that damps a rate here. Ones
+# digit 6 = 4 + 2.
 . ${R}etc/init.d-posix/airframes/2510_gz_cloudship
