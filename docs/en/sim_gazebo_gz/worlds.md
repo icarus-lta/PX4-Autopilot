@@ -48,6 +48,7 @@ It is not recommended as the low frame rate causes segmentation faults on some f
 The world the [airships](../sim_gazebo_gz/vehicles.md#airship) fly in. It is the default world plus a [Buoyancy](https://gazebosim.org/api/sim/8/classgz_1_1sim_1_1systems_1_1Buoyancy.html) system at an air density of 1.225 kg/m³.
 
 A lighter-than-air vehicle gets all of its weight support that way, and the Buoyancy system lifts only the links a world names in its `<enable>` list, so an airship spawned into any other world has no lift and falls. Adding an airship to another world means adding the plugin to it and listing the model's spawned name, `<model>_<instance>`.
+This world lists each airship model's bare name and instances 0 to 3 only, so a fifth vehicle of one model in a multi-vehicle run has no lift and falls.
 
 [PX4-gazebo-models/main/worlds/lta.sdf](https://github.com/PX4/PX4-gazebo-models/blob/main/worlds/lta.sdf)
 

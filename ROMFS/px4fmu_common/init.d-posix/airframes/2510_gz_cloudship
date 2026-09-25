@@ -18,13 +18,13 @@
 # The same vehicle as 2507 on the flight side, in gz. The airship SITL block
 # gives each vehicle a decade, in the order of the flight numbers: 2500 the
 # generic airship, 2510 the Cloudship, 2520 the independently vectored one.
-# 2507 could not be the gz Cloudship's number because it shares the generic
-# airship's decade, whose ones digits are that family's physics variants; the
-# gazebo-classic Cloudship that used to sit at 2507 is now 2519, in this
-# decade, where ones digit 9 means the classic twin. Within the decade the
-# ones digit is what the plant carries, 1 for hull drag, 2 for fin lift, 4
-# for fluid added mass, summed. This one is the rigid hull, buoyancy and
-# nothing else fluid, the plant to regress the allocator against.
+# Within a decade the ones digit is what the plant carries, 1 for hull drag,
+# 2 for fin lift, 4 for fluid added mass, summed (the generic airship's fins
+# are its flaps, so its decade has no fin bit), and 9 is the gazebo-classic
+# twin: the whole Cloudship family, the classic model included, sits at
+# 2510-2519, and 2507 stays the flight airframe's number alone. This one is
+# the rigid hull, buoyancy and nothing else fluid, the plant to regress the
+# allocator against.
 
 param set-default COM_PREARM_MODE 2
 
@@ -93,8 +93,10 @@ param set-default CA_R_REV 4
 
 # No gains are set here on purpose: the AS_YAWRATE_* defaults stay, and the
 # SITL gate on this plant passes with them. For scale, 4.48 N m of tail yaw
-# against 5.67 kg m^2 is 0.79 rad/s^2 per unit of normalized command. The
-# generic airship the defaults were tuned on had 54 N m against 76.5 kg m^2
-# then, 0.71; with its tail sized it has 108.8 kg m^2, 0.50. The 4.48 is
+# against the vehicle's 5.80 kg m^2 is 0.77 rad/s^2 per unit of normalized
+# command, 0.46 with the 3.95 kg m^2 of added yaw inertia the complete plant
+# carries. The defaults were tuned on the independently vectored airship's gz
+# model, 54 N m of pod yaw against 79 kg m^2, 0.69, before it carried a tail
+# (129 kg m^2 now, 0.42; 321 and 0.17 with its added mass). The 4.48 is
 # 2.3544 N on a 1.902 m lever, the lever being to the ventral fin root where
 # the classic model puts the yaw thruster.

@@ -31,7 +31,8 @@ param set-default CA_AIRSHIP_TLT_R 120
 
 # Set THR_MDL_FAC from the measured thrust curve; the AS_YAWRATE_* defaults
 # were tuned in the gz airship_vectored_independent model with THR_MDL_FAC 1,
-# whose hull meets no air at all, before its tail was sized (yaw inertia
-# 76.5 kg m^2 then, 108.8 now): retune them on the vehicle. The posix 2521 to
-# 2527 plants add hull drag, fin lift and added mass, and the defaults were
-# not retuned against any of them
+# on a hull that meets no air at all and had 79 kg m^2 of yaw inertia (129
+# with the tail it now carries): retune them on the vehicle. The posix 2521
+# to 2527 plants add hull drag, fin lift and added mass, the last of them
+# 192 kg m^2 of yaw inertia on its own, and the defaults were not retuned
+# against any of them

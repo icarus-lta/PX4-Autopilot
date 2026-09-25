@@ -23,6 +23,14 @@
 # flaps are its only attitude authority. Within this decade the ones digit is
 # what the plant carries, 1 for hull drag and 4 for fluid added mass, summed;
 # no fin bit, since these fins are the actuators and every member has them.
+# On the rigid hull the fins are the only yaw moment, so in a steady turn
+# they carry no net side force: a held rudder sets a sideslip rather than a
+# turn, and hull drag adds a weak one. The added-mass members (2504, 2505)
+# turn because there the fins must also hold the hull's Munk moment, and a
+# held elevator likewise makes heave rather than holding an attitude. With
+# neither independent pods nor a tail thruster the airship controller keeps
+# the yaw stick as rudder torque in every mode rather than closing its yaw
+# rate loop.
 
 param set-default COM_PREARM_MODE 2
 
@@ -47,20 +55,20 @@ param set-default SIM_GZ_EC_MAX2 300
 # normalized thrust demand is the thrust the motors deliver at every level
 param set-default THR_MDL_FAC 1
 
-# Flap servos in the output order above; the gz joints stop at +-25 deg
+# Flap servos in the output order above; the gz joints stop at +-11 deg
 # and the bridge maps the +-1 surface command onto that same range
 param set-default SIM_GZ_SV_FUNC1 201
 param set-default SIM_GZ_SV_FUNC2 202
 param set-default SIM_GZ_SV_FUNC3 203
 param set-default SIM_GZ_SV_FUNC4 204
-param set-default SIM_GZ_SV_MINA1 -25
-param set-default SIM_GZ_SV_MAXA1 25
-param set-default SIM_GZ_SV_MINA2 -25
-param set-default SIM_GZ_SV_MAXA2 25
-param set-default SIM_GZ_SV_MINA3 -25
-param set-default SIM_GZ_SV_MAXA3 25
-param set-default SIM_GZ_SV_MINA4 -25
-param set-default SIM_GZ_SV_MAXA4 25
+param set-default SIM_GZ_SV_MINA1 -11
+param set-default SIM_GZ_SV_MAXA1 11
+param set-default SIM_GZ_SV_MINA2 -11
+param set-default SIM_GZ_SV_MAXA2 11
+param set-default SIM_GZ_SV_MINA3 -11
+param set-default SIM_GZ_SV_MAXA3 11
+param set-default SIM_GZ_SV_MINA4 -11
+param set-default SIM_GZ_SV_MAXA4 11
 
 # One collective thrust command with the pods fixed thrusting forward, as
 # 2500 declares it: the zero tilt range allocates no tilt servo

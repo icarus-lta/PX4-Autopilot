@@ -68,9 +68,10 @@ px4_add_romfs_files(
 	# Airship gz decades, in the order of the flight numbers: the decade is the
 	# vehicle, a gz member's ones digit is its physics mask (1 hull drag, 2
 	# fins, 4 added mass, summed) and 9 is the gazebo-classic twin. 2500 and
-	# 2507 are the flight numbers of upstream's generic airship and Cloudship;
-	# the Cloudship's gz decade cannot be 2500's, so it is the next one, and the
-	# classic Cloudship moved from 2507 into it at 2519.
+	# 2507 are the flight numbers of the generic airship and the Cloudship. The
+	# generic airship's gz family is 2500-2505 (its fins are its flaps, so it
+	# has no fin bit); the Cloudship's is the next decade, its classic twin at
+	# 2519, which keeps each vehicle's airframes together.
 	#   2500 airship_fixed (the 2500 airframe itself: fixed thrusters, fin flaps)
 	#   2510 cloudship
 	#   2520 airship_vectored_independent (shares its flight number)
