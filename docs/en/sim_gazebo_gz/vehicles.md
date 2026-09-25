@@ -220,17 +220,23 @@ make px4_sitl gz_rover_mecanum
 Airships get all of their weight support from the [Buoyancy](https://gazebosim.org/api/sim/8/classgz_1_1sim_1_1systems_1_1Buoyancy.html) system, which is a world plugin, so all of them use the [lta world](../sim_gazebo_gz/worlds.md#lta).
 
 Each airship is a family of models named by the fluid physics they carry, in a fixed order: `<vehicle>[_am][_fin][_drag]`.
-The bare name is the rigid hull with buoyancy and nothing else, `_am` adds the hull's fluid added mass, `_fin` adds fin lift, and `_drag` adds hull drag and rotational damping.
-Every variant except `_am` is a thin merge include of the model with one token fewer, so the vehicle body is written once, plus the `_am` copy, which `<fluid_added_mass>` forces because it lives in the link's inertial and a merge include can only add elements.
-The airframe number's ones digit is a mask of the physics the model carries: 1 for drag, 2 for fins, 4 for added mass, summed.
+The bare name is the rigid hull with buoyancy and no other fluid physics, `_am` adds the hull's fluid added mass, `_fin` adds fin lift, and `_drag` adds hull drag and rotational damping.
+The Generic Airship is the exception: its fins are its flaps, so every member carries them and its family has no `_fin` token.
+Every variant except `_am` is a thin merge include of the model with one token fewer, so the vehicle body is written once, plus the `_am` copy: `<fluid_added_mass>` lives in the link's inertial, which a plain merge include cannot change.
+The airframe number's ones digit is a mask of the name's tokens: 1 for `_drag`, 2 for `_fin`, 4 for `_am`, summed, so the Generic Airship uses 2500, 2501, 2504 and 2505 only.
 
 Running one control loop against several plants separates what it owes to the model from what it owes to itself.
 Regress the allocator on the rigid hull; tune the loop on the complete one.
+World wind reaches only the fins' lift, not the hull's drag or added mass, so disturb these models with an external force rather than the world's wind.
 
 ### Generic Airship
 
 [Generic Airship](../frames_airship/index.md) as its flight airframe declares it: two fixed forward thrusters and four fin flaps, two elevators and two rudders, on a rigid hull that meets no air.
 The flaps are its only attitude authority, and like real ones they give nothing until the hull moves, so fly it forward first.
+Nothing on the rigid hull limits that speed; the Hull Drag members settle at one.
+On the rigid hull the fins are the only yaw moment, so in a steady turn they carry no net side force: a held rudder sets a sideslip rather than a turn, and hull drag adds a weak one.
+The Added Mass members turn because there the fins must also hold the hull's Munk moment.
+In pitch, likewise, a held elevator makes heave rather than holding an attitude.
 Since the fins are the actuators, every member of this family carries them and there is no `_fin` variant.
 
 ```sh
@@ -254,10 +260,10 @@ No drag.
 make px4_sitl gz_airship_fixed_am
 ```
 
-### Generic Airship (Added Mass, Hull Drag)
+### Generic Airship (Complete)
 
 Everything the hull has: added mass, hull drag and rotational damping.
-This is the plant to tune the loops against.
+This is the plant to fly it on.
 
 ```sh
 make px4_sitl gz_airship_fixed_am_drag
