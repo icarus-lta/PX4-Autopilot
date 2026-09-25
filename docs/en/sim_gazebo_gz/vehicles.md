@@ -227,9 +227,45 @@ The airframe number's ones digit is a mask of the physics the model carries: 1 f
 Running one control loop against several plants separates what it owes to the model from what it owes to itself.
 Regress the allocator on the rigid hull; tune the loop on the complete one.
 
+### Generic Airship
+
+[Generic Airship](../frames_airship/index.md) as its flight airframe declares it: two fixed forward thrusters and four fin flaps, two elevators and two rudders, on a rigid hull that meets no air.
+The flaps are its only attitude authority, and like real ones they give nothing until the hull moves, so fly it forward first.
+Since the fins are the actuators, every member of this family carries them and there is no `_fin` variant.
+
+```sh
+make px4_sitl gz_airship_fixed
+```
+
+### Generic Airship (Hull Drag)
+
+The same vehicle with hull drag and rotational damping.
+
+```sh
+make px4_sitl gz_airship_fixed_drag
+```
+
+### Generic Airship (Added Mass)
+
+The same vehicle with the hull's fluid added mass, which brings the Munk moment, and the tail that was sized against it.
+No drag.
+
+```sh
+make px4_sitl gz_airship_fixed_am
+```
+
+### Generic Airship (Added Mass, Hull Drag)
+
+Everything the hull has: added mass, hull drag and rotational damping.
+This is the plant to tune the loops against.
+
+```sh
+make px4_sitl gz_airship_fixed_am_drag
+```
+
 ### Generic Airship (Independent Vectoring)
 
-[Generic Airship](../frames_airship/index.md) with two independently tilting thrust pods and a rigid hull that meets no air: a torque keeps accelerating it and nothing damps a rotation.
+The same hull with two independently tilting thrust pods instead of the flaps: a torque keeps accelerating it and nothing damps a rotation.
 
 ```sh
 make px4_sitl gz_airship_vectored_independent
@@ -241,6 +277,40 @@ The same vehicle with hull drag and rotational damping.
 
 ```sh
 make px4_sitl gz_airship_vectored_independent_drag
+```
+
+### Generic Airship (Independent Vectoring, Fins)
+
+The same vehicle with its four fins as lifting surfaces, isolated from the other physics so that their contribution can be measured on its own.
+
+```sh
+make px4_sitl gz_airship_vectored_independent_fin
+```
+
+### Generic Airship (Independent Vectoring, Added Mass)
+
+The same vehicle with the hull's fluid added mass and nothing to oppose the Munk moment it brings.
+It exists to measure that term on its own.
+
+```sh
+make px4_sitl gz_airship_vectored_independent_am
+```
+
+### Generic Airship (Independent Vectoring, Added Mass, Fins)
+
+Added mass and fin lift together, the Munk moment and the one thing on this hull that opposes it, with no drag.
+
+```sh
+make px4_sitl gz_airship_vectored_independent_am_fin
+```
+
+### Generic Airship (Independent Vectoring, Complete)
+
+Everything: added mass, fin lift, hull drag and rotational damping.
+This is the plant to tune the loops against.
+
+```sh
+make px4_sitl gz_airship_vectored_independent_am_fin_drag
 ```
 
 ### Cloudship
