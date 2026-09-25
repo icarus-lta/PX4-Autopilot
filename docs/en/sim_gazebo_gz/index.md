@@ -67,8 +67,16 @@ Note that all gazebo make targets have the prefix `gz_`.
 | [Differential Rover](../sim_gazebo_gz/vehicles.md#differential-rover)                                                         | `make px4_sitl gz_rover_differential`                | 50000 |
 | [Ackermann Rover](../sim_gazebo_gz/vehicles.md#ackermann-rover)                                                               | `make px4_sitl gz_rover_ackermann`                   | 51000 |
 | [Mecanum Rover](../sim_gazebo_gz/vehicles.md#mecanum-rover)                                                                   | `make px4_sitl gz_rover_mecanum`                     | 52000 |
+| [Generic Airship](../sim_gazebo_gz/vehicles.md#generic-airship)                                                               | `make px4_sitl gz_airship_fixed`                     | 2500  |
+| [Generic Airship (Hull Drag)](../sim_gazebo_gz/vehicles.md#generic-airship-hull-drag)                                         | `make px4_sitl gz_airship_fixed_drag`                | 2501  |
+| [Generic Airship (Added Mass)](../sim_gazebo_gz/vehicles.md#generic-airship-added-mass)                                       | `make px4_sitl gz_airship_fixed_am`                  | 2504  |
+| [Generic Airship (Added Mass, Hull Drag)](../sim_gazebo_gz/vehicles.md#generic-airship-added-mass-hull-drag)                  | `make px4_sitl gz_airship_fixed_am_drag`             | 2505  |
 | [Generic Airship (Independent Vectoring)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring)                 | `make px4_sitl gz_airship_vectored_independent`      | 2520  |
 | [Generic Airship (Independent Vectoring, Hull Drag)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-hull-drag)                                         | `make px4_sitl gz_airship_vectored_independent_drag` | 2521  |
+| [Generic Airship (Independent Vectoring, Fins)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-fins)      | `make px4_sitl gz_airship_vectored_independent_fin`  | 2522  |
+| [Generic Airship (Independent Vectoring, Added Mass)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-added-mass)| `make px4_sitl gz_airship_vectored_independent_am`   | 2524  |
+| [Generic Airship (Independent Vectoring, Added Mass, Fins)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-added-mass-fins)| `make px4_sitl gz_airship_vectored_independent_am_fin`| 2526  |
+| [Generic Airship (Independent Vectoring, Complete)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-complete)| `make px4_sitl gz_airship_vectored_independent_am_fin_drag`| 2527  |
 | [Cloudship](../sim_gazebo_gz/vehicles.md#cloudship)                                                                           | `make px4_sitl gz_cloudship`                         | 2510  |
 | [Cloudship (Hull Drag)](../sim_gazebo_gz/vehicles.md#cloudship-hull-drag)                                                     | `make px4_sitl gz_cloudship_drag`                    | 2511  |
 | [Cloudship (Fins)](../sim_gazebo_gz/vehicles.md#cloudship-fins)                                                               | `make px4_sitl gz_cloudship_fin`                     | 2512  |

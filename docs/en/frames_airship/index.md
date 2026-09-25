@@ -17,10 +17,11 @@ The frame configurations are shown in [Airframes Reference > Airship](../airfram
 
 ## Simulation
 
-PX4 provides synthetic simulation models for [Gazebo](../sim_gazebo_gz/index.md) of both airships.
+PX4 provides synthetic simulation models for [Gazebo](../sim_gazebo_gz/index.md) of both airships, two of them for the generic airship, one per propulsion layout.
 Each is a family of models named by the fluid physics they carry, `<vehicle>[_am][_fin][_drag]`, described in the [Airship](../sim_gazebo_gz/vehicles.md#airship) section of the vehicle list:
 
-- [Generic Airship (Independent Vectoring)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring), and its [Hull Drag](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-hull-drag) variant
+- [Generic Airship](../sim_gazebo_gz/vehicles.md#generic-airship), the 2500 airframe with fixed thrusters and fin flaps, with its [Hull Drag](../sim_gazebo_gz/vehicles.md#generic-airship-hull-drag), [Added Mass](../sim_gazebo_gz/vehicles.md#generic-airship-added-mass) and [Added Mass, Hull Drag](../sim_gazebo_gz/vehicles.md#generic-airship-added-mass-hull-drag) variants
+- [Generic Airship (Independent Vectoring)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring), with its [Hull Drag](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-hull-drag), [Fins](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-fins), [Added Mass](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-added-mass), [Added Mass, Fins](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-added-mass-fins) and [Complete](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-complete) variants
 - [Cloudship](../sim_gazebo_gz/vehicles.md#cloudship), with its [Hull Drag](../sim_gazebo_gz/vehicles.md#cloudship-hull-drag), [Fins](../sim_gazebo_gz/vehicles.md#cloudship-fins), [Added Mass](../sim_gazebo_gz/vehicles.md#cloudship-added-mass), [Added Mass, Fins](../sim_gazebo_gz/vehicles.md#cloudship-added-mass-fins) and [Complete](../sim_gazebo_gz/vehicles.md#cloudship-complete) variants
 
 Running an airframe against several of its plants separates what the control loop owes to the model from what it owes to itself.
