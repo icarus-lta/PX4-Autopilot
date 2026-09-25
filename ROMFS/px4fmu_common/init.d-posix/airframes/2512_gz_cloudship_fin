@@ -10,8 +10,4 @@
 
 PX4_SIM_MODEL=${PX4_SIM_MODEL:=cloudship_fin}
 
-# The 2510 vehicle with its four fins as lifting surfaces and nothing else
-# fluid. On its own this isolates what the fins contribute, for measuring;
-# the plant they exist for is 2516, where they have the Munk moment to
-# oppose. Ones digit 2: the fin bit.
 . ${R}etc/init.d-posix/airframes/2510_gz_cloudship

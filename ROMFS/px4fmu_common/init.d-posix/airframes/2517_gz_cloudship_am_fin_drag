@@ -10,7 +10,4 @@
 
 PX4_SIM_MODEL=${PX4_SIM_MODEL:=cloudship_am_fin_drag}
 
-# The 2510 vehicle with everything: added mass, fin lift, hull drag and
-# rotational damping. The plant to tune the yaw loop against; 2510 is the one
-# to regress the allocator against. Ones digit 7 = 4 + 2 + 1.
 . ${R}etc/init.d-posix/airframes/2510_gz_cloudship

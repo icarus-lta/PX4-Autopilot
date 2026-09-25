@@ -282,6 +282,7 @@ make px4_sitl gz_airship_vectored_independent_drag
 ### Generic Airship (Independent Vectoring, Fins)
 
 The same vehicle with its four fins as lifting surfaces, isolated from the other physics so that their contribution can be measured on its own.
+The plant they exist for is the Added Mass, Fins variant, where they have the Munk moment to oppose.
 
 ```sh
 make px4_sitl gz_airship_vectored_independent_fin
@@ -299,6 +300,7 @@ make px4_sitl gz_airship_vectored_independent_am
 ### Generic Airship (Independent Vectoring, Added Mass, Fins)
 
 Added mass and fin lift together, the Munk moment and the one thing on this hull that opposes it, with no drag.
+With no hull drag, the fins are also all that damps a rate here.
 
 ```sh
 make px4_sitl gz_airship_vectored_independent_am_fin
@@ -333,6 +335,7 @@ make px4_sitl gz_cloudship_drag
 ### Cloudship (Fins)
 
 The same vehicle with its four fins as lifting surfaces, isolated from the other physics so that their contribution can be measured on its own.
+The plant they exist for is the Added Mass, Fins variant, where they have the Munk moment to oppose.
 
 ```sh
 make px4_sitl gz_cloudship_fin
@@ -351,6 +354,7 @@ make px4_sitl gz_cloudship_am
 ### Cloudship (Added Mass, Fins)
 
 Added mass and fin lift together, the Munk moment and the one thing on this hull that opposes it, with no drag.
+With no hull drag, the fins are also all that damps a rate here.
 
 ```sh
 make px4_sitl gz_cloudship_am_fin

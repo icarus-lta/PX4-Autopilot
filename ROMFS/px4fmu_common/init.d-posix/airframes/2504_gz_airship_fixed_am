@@ -10,9 +10,4 @@
 
 PX4_SIM_MODEL=${PX4_SIM_MODEL:=airship_fixed_am}
 
-# The 2500 vehicle with the hull's fluid added mass. The engine folds it
-# into the spatial inertia, Coriolis terms and all, so this plant carries the
-# Munk moment, and the fins that oppose it are this vehicle's actuators, so
-# they are already here: this is the pair, the destabilising hull and the
-# tail sized against it, with no drag. Ones digit 4: the added-mass bit.
 . ${R}etc/init.d-posix/airframes/2500_gz_airship_fixed
