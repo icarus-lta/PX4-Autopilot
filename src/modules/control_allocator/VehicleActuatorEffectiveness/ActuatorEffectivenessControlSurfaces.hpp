@@ -68,6 +68,39 @@ public:
 		RightSpoiler = 18,
 	};
 
+	/**
+	 * Whether a surface of this type gets its TRQ parameters as torque;
+	 * flaps, airbrakes, the steering wheel and spoilers get none.
+	 */
+	static constexpr bool takesTorque(Type surface_type)
+	{
+		switch (surface_type) {
+		case Type::LeftFlap:
+		case Type::RightFlap:
+		case Type::Airbrake:
+		case Type::SteeringWheel:
+		case Type::LeftSpoiler:
+		case Type::RightSpoiler:
+			return false;
+
+		case Type::LeftAileron:
+		case Type::RightAileron:
+		case Type::Elevator:
+		case Type::Rudder:
+		case Type::LeftElevon:
+		case Type::RightElevon:
+		case Type::LeftVTail:
+		case Type::RightVTail:
+		case Type::Custom:
+		case Type::LeftATail:
+		case Type::RightATail:
+		case Type::SingleChannelAileron:
+			break;
+		}
+
+		return true; // also a value outside the enum, such as 0 (not set)
+	}
+
 	struct Params {
 		Type type;
 
