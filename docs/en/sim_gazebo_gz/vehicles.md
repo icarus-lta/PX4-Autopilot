@@ -221,7 +221,7 @@ Airships get all of their weight support from the [Buoyancy](https://gazebosim.o
 
 Each airship is a family of models named by the fluid physics they carry, in a fixed order: `<vehicle>[_am][_fin][_drag]`.
 The bare name is the rigid hull with buoyancy and no other fluid physics, `_am` adds the hull's fluid added mass, `_fin` adds fin lift, and `_drag` adds hull drag and rotational damping.
-The Generic Airship is the exception: its fins are its flaps, so every member carries them and its family has no `_fin` token.
+The Generic Airship (`airship_fixed`) is the exception: its fins are its flaps, so every member carries them and its family has no `_fin` token.
 Every variant except `_am` is a thin merge include of the model with one token fewer, so the vehicle body is written once, plus the `_am` copy: `<fluid_added_mass>` lives in the link's inertial, which a plain merge include cannot change.
 The airframe number's ones digit is a mask of the name's tokens: 1 for `_drag`, 2 for `_fin`, 4 for `_am`, summed, so the Generic Airship uses 2500, 2501, 2504 and 2505 only.
 
@@ -233,11 +233,10 @@ World wind reaches only the fins' lift, not the hull's drag or added mass, so di
 
 [Generic Airship](../frames_airship/index.md) as its flight airframe declares it: two fixed forward thrusters and four fin flaps, two elevators and two rudders, on a rigid hull that meets no air.
 The flaps are its only attitude authority, and like real ones they give nothing until the hull moves, so fly it forward first.
-Nothing on the rigid hull limits that speed; the Hull Drag members settle at one.
+Nothing on the rigid hull limits that speed; the members with hull drag (Hull Drag, Complete) settle at one.
 On the rigid hull the fins are the only yaw moment, so in a steady turn they carry no net side force: a held rudder sets a sideslip rather than a turn, and hull drag adds a weak one.
-The Added Mass members turn because there the fins must also hold the hull's Munk moment.
-In pitch, likewise, a held elevator makes heave rather than holding an attitude.
-Since the fins are the actuators, every member of this family carries them and there is no `_fin` variant.
+The members with added mass (Added Mass, Complete) turn because there the fins must also hold the hull's Munk moment.
+A held elevator likewise makes heave on the rigid hull, the pitch settling back to level; with added mass the Munk moment tilts the hull until the buoyancy pendulum balances it, so the elevator holds an attitude.
 
 ```sh
 make px4_sitl gz_airship_fixed

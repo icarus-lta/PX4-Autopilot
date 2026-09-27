@@ -20,14 +20,16 @@
 # The 2500 flight airframe in gz: two fixed forward thrusters and four fin
 # flaps, elevators and rudders, on the generic hull. The allocation block
 # below is 2500's, and the gz model has no yaw thruster and no tilt, so the
-# flaps are its only attitude authority. Within this decade the ones digit is
-# what the plant carries, 1 for hull drag and 4 for fluid added mass, summed;
-# no fin bit, since these fins are the actuators and every member has them.
+# flaps are its only attitude authority. The ones-digit physics mask is
+# explained above the 25xx entries of this directory's CMakeLists.txt; this
+# family has no fin bit, since every member carries the fins as actuators.
 # On the rigid hull the fins are the only yaw moment, so in a steady turn
 # they carry no net side force: a held rudder sets a sideslip rather than a
 # turn, and hull drag adds a weak one. The added-mass members (2504, 2505)
-# turn because there the fins must also hold the hull's Munk moment, and a
-# held elevator likewise makes heave rather than holding an attitude. With
+# turn because there the fins must also hold the hull's Munk moment. A held
+# elevator likewise makes heave on the rigid hull, the pitch settling back
+# to level; on the added-mass members the Munk moment tilts the hull until
+# the buoyancy pendulum balances it, so the elevator holds an attitude. With
 # neither independent pods nor a tail thruster the airship controller keeps
 # the yaw stick as rudder torque in every mode rather than closing its yaw
 # rate loop.

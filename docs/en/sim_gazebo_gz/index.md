@@ -50,39 +50,39 @@ This runs both the PX4 SITL instance and the Gazebo client.
 The supported vehicles and `make` commands are listed below.
 Note that all gazebo make targets have the prefix `gz_`.
 
-| Vehicle                                                                                                                       | Command                               | `PX4_SYS_AUTOSTART` |
-| ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------- |
-| [Quadrotor (x500)](../sim_gazebo_gz/vehicles.md#x500-quadrotor)                                                               | `make px4_sitl gz_x500`                              | 4001  |
-| [X500 Quadrotor with Depth Camera (Front-facing)](../sim_gazebo_gz/vehicles.md#x500-quadrotor-with-depth-camera-front-facing) | `make px4_sitl gz_x500_depth`                        | 4002  |
-| [Quadrotor(x500) with Vision Odometry](../sim_gazebo_gz/vehicles.md#x500-quadrotor-with-visual-odometry)                      | `make px4_sitl gz_x500_vision`                       | 4005  |
-| [Quadrotor(x500) with 1D LIDAR (Down-facing)](../sim_gazebo_gz/vehicles.md#x500-quadrotor-with-1d-lidar-down-facing)          | `make px4_sitl gz_x500_lidar_down`                   | 4016  |
-| [Quadrotor(x500) with 2D LIDAR](../sim_gazebo_gz/vehicles.md#x500-quadrotor-with-2d-lidar)                                    | `make px4_sitl gz_x500_lidar_2d`                     | 4013  |
-| [Quadrotor(x500) with 1D LIDAR (Front-facing)](../sim_gazebo_gz/vehicles.md#x500-quadrotor-with-1d-lidar-front-facing)        | `make px4_sitl gz_x500_lidar_front`                  | 4017  |
-| [Quadrotor(x500) with gimbal (Front-facing) in Gazebo](../sim_gazebo_gz/vehicles.md#x500-quadrotor-with-gimbal-front-facing)  | `make px4_sitl gz_x500_gimbal`                       | 4019  |
-| [VTOL](../sim_gazebo_gz/vehicles.md#standard-vtol)                                                                            | `make px4_sitl gz_standard_vtol`                     | 4004  |
-| [Plane](../sim_gazebo_gz/vehicles.md#standard-plane)                                                                          | `make px4_sitl gz_rc_cessna`                         | 4003  |
-| [Advanced Plane](../sim_gazebo_gz/vehicles.md#advanced-plane)                                                                 | `make px4_sitl gz_advanced_plane`                    | 4008  |
-| [Quad Tailsitter VTOL](../sim_gazebo_gz/vehicles.md#quad-tailsitter-vtol)                                                     | `make px4_sitl gz_quadtailsitter`                    | 4018  |
-| [Tiltrotor VTOL](../sim_gazebo_gz/vehicles.md#tiltrotor-vtol)                                                                 | `make px4_sitl gz_tiltrotor`                         | 4020  |
-| [Differential Rover](../sim_gazebo_gz/vehicles.md#differential-rover)                                                         | `make px4_sitl gz_rover_differential`                | 50000 |
-| [Ackermann Rover](../sim_gazebo_gz/vehicles.md#ackermann-rover)                                                               | `make px4_sitl gz_rover_ackermann`                   | 51000 |
-| [Mecanum Rover](../sim_gazebo_gz/vehicles.md#mecanum-rover)                                                                   | `make px4_sitl gz_rover_mecanum`                     | 52000 |
-| [Generic Airship](../sim_gazebo_gz/vehicles.md#generic-airship)                                                               | `make px4_sitl gz_airship_fixed`                     | 2500  |
-| [Generic Airship (Hull Drag)](../sim_gazebo_gz/vehicles.md#generic-airship-hull-drag)                                         | `make px4_sitl gz_airship_fixed_drag`                | 2501  |
-| [Generic Airship (Added Mass)](../sim_gazebo_gz/vehicles.md#generic-airship-added-mass)                                       | `make px4_sitl gz_airship_fixed_am`                  | 2504  |
-| [Generic Airship (Complete)](../sim_gazebo_gz/vehicles.md#generic-airship-complete)                                            | `make px4_sitl gz_airship_fixed_am_drag`             | 2505  |
-| [Generic Airship (Independent Vectoring)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring)                 | `make px4_sitl gz_airship_vectored_independent`      | 2520  |
-| [Generic Airship (Independent Vectoring, Hull Drag)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-hull-drag)                                         | `make px4_sitl gz_airship_vectored_independent_drag` | 2521  |
-| [Generic Airship (Independent Vectoring, Fins)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-fins)      | `make px4_sitl gz_airship_vectored_independent_fin`  | 2522  |
-| [Generic Airship (Independent Vectoring, Added Mass)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-added-mass)| `make px4_sitl gz_airship_vectored_independent_am`   | 2524  |
-| [Generic Airship (Independent Vectoring, Added Mass, Fins)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-added-mass-fins)| `make px4_sitl gz_airship_vectored_independent_am_fin`| 2526  |
-| [Generic Airship (Independent Vectoring, Complete)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-complete)| `make px4_sitl gz_airship_vectored_independent_am_fin_drag`| 2527  |
-| [Cloudship](../sim_gazebo_gz/vehicles.md#cloudship)                                                                           | `make px4_sitl gz_cloudship`                         | 2510  |
-| [Cloudship (Hull Drag)](../sim_gazebo_gz/vehicles.md#cloudship-hull-drag)                                                     | `make px4_sitl gz_cloudship_drag`                    | 2511  |
-| [Cloudship (Fins)](../sim_gazebo_gz/vehicles.md#cloudship-fins)                                                               | `make px4_sitl gz_cloudship_fin`                     | 2512  |
-| [Cloudship (Added Mass)](../sim_gazebo_gz/vehicles.md#cloudship-added-mass)                                                   | `make px4_sitl gz_cloudship_am`                      | 2514  |
-| [Cloudship (Added Mass, Fins)](../sim_gazebo_gz/vehicles.md#cloudship-added-mass-fins)                                        | `make px4_sitl gz_cloudship_am_fin`                  | 2516  |
-| [Cloudship (Complete)](../sim_gazebo_gz/vehicles.md#cloudship-complete)                                                       | `make px4_sitl gz_cloudship_am_fin_drag`             | 2517  |
+| Vehicle                                                                                                                                         | Command                                                     | `PX4_SYS_AUTOSTART` |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------- |
+| [Quadrotor (x500)](../sim_gazebo_gz/vehicles.md#x500-quadrotor)                                                                                 | `make px4_sitl gz_x500`                                     | 4001                |
+| [X500 Quadrotor with Depth Camera (Front-facing)](../sim_gazebo_gz/vehicles.md#x500-quadrotor-with-depth-camera-front-facing)                   | `make px4_sitl gz_x500_depth`                               | 4002                |
+| [Quadrotor(x500) with Vision Odometry](../sim_gazebo_gz/vehicles.md#x500-quadrotor-with-visual-odometry)                                        | `make px4_sitl gz_x500_vision`                              | 4005                |
+| [Quadrotor(x500) with 1D LIDAR (Down-facing)](../sim_gazebo_gz/vehicles.md#x500-quadrotor-with-1d-lidar-down-facing)                            | `make px4_sitl gz_x500_lidar_down`                          | 4016                |
+| [Quadrotor(x500) with 2D LIDAR](../sim_gazebo_gz/vehicles.md#x500-quadrotor-with-2d-lidar)                                                      | `make px4_sitl gz_x500_lidar_2d`                            | 4013                |
+| [Quadrotor(x500) with 1D LIDAR (Front-facing)](../sim_gazebo_gz/vehicles.md#x500-quadrotor-with-1d-lidar-front-facing)                          | `make px4_sitl gz_x500_lidar_front`                         | 4017                |
+| [Quadrotor(x500) with gimbal (Front-facing) in Gazebo](../sim_gazebo_gz/vehicles.md#x500-quadrotor-with-gimbal-front-facing)                    | `make px4_sitl gz_x500_gimbal`                              | 4019                |
+| [VTOL](../sim_gazebo_gz/vehicles.md#standard-vtol)                                                                                              | `make px4_sitl gz_standard_vtol`                            | 4004                |
+| [Plane](../sim_gazebo_gz/vehicles.md#standard-plane)                                                                                            | `make px4_sitl gz_rc_cessna`                                | 4003                |
+| [Advanced Plane](../sim_gazebo_gz/vehicles.md#advanced-plane)                                                                                   | `make px4_sitl gz_advanced_plane`                           | 4008                |
+| [Quad Tailsitter VTOL](../sim_gazebo_gz/vehicles.md#quad-tailsitter-vtol)                                                                       | `make px4_sitl gz_quadtailsitter`                           | 4018                |
+| [Tiltrotor VTOL](../sim_gazebo_gz/vehicles.md#tiltrotor-vtol)                                                                                   | `make px4_sitl gz_tiltrotor`                                | 4020                |
+| [Differential Rover](../sim_gazebo_gz/vehicles.md#differential-rover)                                                                           | `make px4_sitl gz_rover_differential`                       | 50000               |
+| [Ackermann Rover](../sim_gazebo_gz/vehicles.md#ackermann-rover)                                                                                 | `make px4_sitl gz_rover_ackermann`                          | 51000               |
+| [Mecanum Rover](../sim_gazebo_gz/vehicles.md#mecanum-rover)                                                                                     | `make px4_sitl gz_rover_mecanum`                            | 52000               |
+| [Generic Airship](../sim_gazebo_gz/vehicles.md#generic-airship)                                                                                 | `make px4_sitl gz_airship_fixed`                            | 2500                |
+| [Generic Airship (Hull Drag)](../sim_gazebo_gz/vehicles.md#generic-airship-hull-drag)                                                           | `make px4_sitl gz_airship_fixed_drag`                       | 2501                |
+| [Generic Airship (Added Mass)](../sim_gazebo_gz/vehicles.md#generic-airship-added-mass)                                                         | `make px4_sitl gz_airship_fixed_am`                         | 2504                |
+| [Generic Airship (Complete)](../sim_gazebo_gz/vehicles.md#generic-airship-complete)                                                             | `make px4_sitl gz_airship_fixed_am_drag`                    | 2505                |
+| [Generic Airship (Independent Vectoring)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring)                                   | `make px4_sitl gz_airship_vectored_independent`             | 2520                |
+| [Generic Airship (Independent Vectoring, Hull Drag)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-hull-drag)              | `make px4_sitl gz_airship_vectored_independent_drag`        | 2521                |
+| [Generic Airship (Independent Vectoring, Fins)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-fins)                        | `make px4_sitl gz_airship_vectored_independent_fin`         | 2522                |
+| [Generic Airship (Independent Vectoring, Added Mass)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-added-mass)            | `make px4_sitl gz_airship_vectored_independent_am`          | 2524                |
+| [Generic Airship (Independent Vectoring, Added Mass, Fins)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-added-mass-fins) | `make px4_sitl gz_airship_vectored_independent_am_fin`      | 2526                |
+| [Generic Airship (Independent Vectoring, Complete)](../sim_gazebo_gz/vehicles.md#generic-airship-independent-vectoring-complete)                | `make px4_sitl gz_airship_vectored_independent_am_fin_drag` | 2527                |
+| [Cloudship](../sim_gazebo_gz/vehicles.md#cloudship)                                                                                             | `make px4_sitl gz_cloudship`                                | 2510                |
+| [Cloudship (Hull Drag)](../sim_gazebo_gz/vehicles.md#cloudship-hull-drag)                                                                       | `make px4_sitl gz_cloudship_drag`                           | 2511                |
+| [Cloudship (Fins)](../sim_gazebo_gz/vehicles.md#cloudship-fins)                                                                                 | `make px4_sitl gz_cloudship_fin`                            | 2512                |
+| [Cloudship (Added Mass)](../sim_gazebo_gz/vehicles.md#cloudship-added-mass)                                                                     | `make px4_sitl gz_cloudship_am`                             | 2514                |
+| [Cloudship (Added Mass, Fins)](../sim_gazebo_gz/vehicles.md#cloudship-added-mass-fins)                                                          | `make px4_sitl gz_cloudship_am_fin`                         | 2516                |
+| [Cloudship (Complete)](../sim_gazebo_gz/vehicles.md#cloudship-complete)                                                                         | `make px4_sitl gz_cloudship_am_fin_drag`                    | 2517                |
 
 All [vehicle models](../sim_gazebo_gz/vehicles.md) (and [worlds](#specify-world)) are included as a submodule from the [Gazebo Models Repository](../sim_gazebo_gz/gazebo_models.md) repository.
 
