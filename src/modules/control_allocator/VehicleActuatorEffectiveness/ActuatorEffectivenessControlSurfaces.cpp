@@ -143,61 +143,8 @@ void ActuatorEffectivenessControlSurfaces::updateParams()
 		param_get(_param_handles[i].scale_spoiler, &_params[i].scale_spoiler);
 
 		// TODO: enforce limits (note that tailsitter uses different limits)?
-		switch (_params[i].type) {
-
-		case Type::LeftAileron:
-			break;
-
-		case Type::RightAileron:
-			break;
-
-		case Type::Elevator:
-			break;
-
-		case Type::Rudder:
-			break;
-
-		case Type::LeftElevon:
-			break;
-
-		case Type::RightElevon:
-			break;
-
-		case Type::LeftVTail:
-			break;
-
-		case Type::RightVTail:
-			break;
-
-		case Type::LeftFlap:
-		case Type::RightFlap:
+		if (!takesTorque(_params[i].type)) {
 			torque.setZero();
-			break;
-
-		case Type::Airbrake:
-			torque.setZero();
-			break;
-
-		case Type::Custom:
-			break;
-
-		case Type::LeftATail:
-			break;
-
-		case Type::RightATail:
-			break;
-
-		case Type::SingleChannelAileron:
-			break;
-
-		case Type::SteeringWheel:
-			torque.setZero();
-			break;
-
-		case Type::LeftSpoiler:
-		case Type::RightSpoiler:
-			torque.setZero();
-			break;
 		}
 	}
 }
