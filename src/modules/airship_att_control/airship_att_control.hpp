@@ -86,7 +86,11 @@ private:
 	 */
 	void parameter_update_poll();
 
-	/** Push the gains into the rate controller and convert the max rate to rad/s */
+	/**
+	 * Push the gains into the rate controller, convert the max rate to rad/s,
+	 * and set _propulsive_yaw from the allocator's parameters, which decides
+	 * whether the yaw rate loop may close (airship_manual_input::propulsiveYaw())
+	 */
 	void parameters_updated();
 
 	void publishThrustSetpoint(const matrix::Vector3f &thrust, const hrt_abstime &timestamp_sample);
@@ -126,7 +130,7 @@ private:
 
 	hrt_abstime _last_run{0};
 	float _yaw_rate_max{0.f};		///< AS_YAWRATE_MAX [rad/s]
-	bool _propulsive_yaw{true};	///< the pods or a tail thruster make yaw torque at rest
+	bool _propulsive_yaw{true};	///< propulsiveYaw(): the yaw rate loop may close on this allocator configuration
 	bool _yaw_loop_was_active{false};	///< the yaw rate loop was closed on the previous cycle
 
 	perf_counter_t _loop_perf;
@@ -139,7 +143,7 @@ private:
 		(ParamFloat<px4::params::MAN_DEADZONE>) _param_man_deadzone,
 		(ParamInt<px4::params::CA_AIRFRAME>) _param_ca_airframe,
 		(ParamInt<px4::params::CA_AIRSHIP_GRP>) _param_ca_airship_grp,
-		(ParamInt<px4::params::CA_AIRSHIP_TAIL>) _param_ca_airship_tail,
+		(ParamBool<px4::params::CA_AIRSHIP_TAIL>) _param_ca_airship_tail,
 		(ParamFloat<px4::params::CA_AIRSHIP_CS_K>) _param_ca_airship_cs_k,
 		(ParamInt<px4::params::CA_SV_CS_COUNT>) _param_ca_sv_cs_count
 	)
