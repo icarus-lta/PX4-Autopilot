@@ -43,7 +43,7 @@ static constexpr float kDt = 0.01f;
 static AirshipYawRateLoop integratorOnly()
 {
 	AirshipYawRateLoop loop;
-	loop.setGains(0.f, 1.f, 1.f);
+	loop.setGains(0.f, 1.f, 1.f, 0.f);
 	return loop;
 }
 
@@ -118,7 +118,7 @@ TEST(AirshipYawRateLoopTest, IntegratorWindsUpToItsLimit)
 {
 	// the library's limit defaults to zero, which would hold the integral at zero
 	AirshipYawRateLoop loop;
-	loop.setGains(0.f, 1.f, 0.3f);
+	loop.setGains(0.f, 1.f, 0.3f, 0.f);
 
 	for (int i = 0; i < 100; i++) {
 		loop.update(Vector3f(), 1.f, kDt);
@@ -128,10 +128,27 @@ TEST(AirshipYawRateLoopTest, IntegratorWindsUpToItsLimit)
 	EXPECT_FLOAT_EQ(loop.update(Vector3f(), 1.f, kDt), 0.3f);
 }
 
+TEST(AirshipYawRateLoopTest, FeedforwardHoldsTheTurnInsteadOfTheIntegrator)
+{
+	AirshipYawRateLoop loop;
+	loop.setGains(0.5f, 1.f, 1.f, 2.f);
+
+	// tracking a 0.1 rad/s turn: no rate error, so the torque is the
+	// feedforward alone and the integrator is not asked to hold the turn
+	for (int i = 0; i < 3; i++) {
+		EXPECT_FLOAT_EQ(loop.update(Vector3f(0.f, 0.f, 0.1f), 0.1f, kDt), 0.2f);
+	}
+
+	EXPECT_FLOAT_EQ(yawIntegral(loop), 0.f);
+
+	// stick released: the turn's torque goes the same cycle and P brakes the rate
+	EXPECT_FLOAT_EQ(loop.update(Vector3f(0.f, 0.f, 0.1f), 0.f, kDt), -0.05f);
+}
+
 TEST(AirshipYawRateLoopTest, NonFiniteTorqueReadsAsZero)
 {
 	AirshipYawRateLoop loop;
-	loop.setGains(0.5f, 0.09f, 0.3f);
+	loop.setGains(0.5f, 0.09f, 0.3f, 0.f);
 	EXPECT_FLOAT_EQ(loop.update(Vector3f(), 1.f, kDt), 0.5f);	// P on a 1 rad/s error
 
 	// a non-finite gyro sample: no torque rather than NaN into the allocator

@@ -34,9 +34,9 @@
 /**
  * @file airship_yaw_rate_loop.hpp
  *
- * The airship's yaw rate loop: a PI loop on the yaw axis of RateControl, its
- * anti-windup from the allocator and its reset when the loop opens, kept free
- * of uORB I/O so it can be unit tested.
+ * The airship's yaw rate loop: a PI loop with setpoint feedforward on the yaw
+ * axis of RateControl, its anti-windup from the allocator and its reset when
+ * the loop opens, kept free of uORB I/O so it can be unit tested.
  */
 
 #pragma once
@@ -79,14 +79,21 @@ public:
 		return flags;
 	}
 
-	/** Yaw rate gains and integrator limit (AS_YAWRATE_P, AS_YAWRATE_I, AS_YR_INT_LIM) */
-	void setGains(float p, float i, float integrator_limit)
+	/**
+	 * Yaw rate gains, integrator limit and feedforward (AS_YAWRATE_P,
+	 * AS_YAWRATE_I, AS_YR_INT_LIM, AS_YAWRATE_FF)
+	 */
+	void setGains(float p, float i, float integrator_limit, float feedforward)
 	{
 		// Yaw axis only: roll and pitch stay stick passthrough, their gains are zero
 		_rate_control.setPidGains(matrix::Vector3f(0.f, 0.f, p), matrix::Vector3f(0.f, 0.f, i), matrix::Vector3f());
 		// The library integrator limit defaults to zero, which would silently
 		// disable the I term
 		_rate_control.setIntegratorLimit(matrix::Vector3f(0.f, 0.f, integrator_limit));
+		// The torque that holds a turn against the hull's yaw damping, taken
+		// from the setpoint so that the integrator does not have to build it
+		// up during the turn and unwind it after
+		_rate_control.setFeedForwardGain(matrix::Vector3f(0.f, 0.f, feedforward));
 	}
 
 	/** Anti-windup feedback from the control allocator */
