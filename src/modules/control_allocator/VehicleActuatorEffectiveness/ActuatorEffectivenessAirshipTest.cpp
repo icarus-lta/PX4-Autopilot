@@ -957,9 +957,10 @@ TEST_F(ActuatorEffectivenessAirshipTest, SurfacesKeepTheirSetpoints)
 TEST_F(ActuatorEffectivenessAirshipTest, NoTorqueSurfaceTypesTakeNoTorque)
 {
 	// ActuatorEffectivenessControlSurfaces::updateParams() zeroes the TRQ
-	// entries of the types takesTorque() rejects: such a surface declares an
-	// empty column, serves no axis, and the collective pods, which cannot
-	// yaw, report the whole demand as a sign rather than the matrix residual
+	// entries of the types controlSurfaceTakesTorque() rejects: such a
+	// surface declares an empty column, serves no axis, and the collective
+	// pods, which cannot yaw, report the whole demand as a sign rather than
+	// the matrix residual
 	setCollectiveMode();
 
 	for (const int32_t type : {9, 10, 11, 16, 17, 18}) {	// flaps, airbrake, steering wheel, spoilers

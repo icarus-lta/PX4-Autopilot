@@ -49,9 +49,6 @@ public:
 
 	using Type = ControlSurfaceType;
 
-	/** Whether a surface of this type gets its TRQ parameters as torque (controlSurfaceTakesTorque()) */
-	static constexpr bool takesTorque(Type surface_type) { return controlSurfaceTakesTorque(surface_type); }
-
 	struct Params {
 		Type type;
 

@@ -48,7 +48,6 @@
 #pragma once
 
 #include "control_allocation/actuator_effectiveness/ActuatorEffectiveness.hpp"
-#include "control_allocation/actuator_effectiveness/AirshipAirframe.hpp"
 #include "ActuatorEffectivenessControlSurfaces.hpp"
 #include "AirshipPod.hpp"
 
@@ -59,9 +58,6 @@
 class ActuatorEffectivenessAirship : public ModuleParams, public ActuatorEffectiveness
 {
 public:
-	/** CA_AIRFRAME value that selects this effectiveness (kCaAirframeAirship) */
-	static constexpr int32_t CA_AIRFRAME_VALUE = kCaAirframeAirship;
-
 	static constexpr int NUM_PODS = 2;
 	enum MotorIndex { STARBOARD = 0, PORT = 1, TAIL = 2 };
 
@@ -80,10 +76,11 @@ public:
 	/**
 	 * No auxiliary controls: takes the allocator's cycle time for the tilt slew
 	 * in updateSetpoint(). Because the flaps/spoiler path is not called, a
-	 * CA_SV_CSn_TYPE of flap or spoiler (or any type takesTorque() rejects) is
-	 * inert on an airship: the surface still occupies its slot, its torque is
-	 * zero (takesTorque()), so it is credited nothing and its setpoint stays at
-	 * CA_SV_CSn_TRIM; CA_SV_CSn_FLAP and CA_SV_CSn_SPOIL are ignored.
+	 * CA_SV_CSn_TYPE of flap or spoiler (or any type controlSurfaceTakesTorque()
+	 * rejects) is inert on an airship: the surface still occupies its slot, its
+	 * torque is zero (controlSurfaceTakesTorque()), so it is credited nothing
+	 * and its setpoint stays at CA_SV_CSn_TRIM; CA_SV_CSn_FLAP and
+	 * CA_SV_CSn_SPOIL are ignored.
 	 */
 	void allocateAuxilaryControls(const float dt, int matrix_index, ActuatorVector &actuator_sp) override { _dt = dt; }
 
