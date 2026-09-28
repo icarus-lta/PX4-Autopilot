@@ -55,7 +55,7 @@ AirshipAttitudeControl::AirshipAttitudeControl() :
 	_loop_perf(perf_alloc(PC_ELAPSED, "airship_att_control"))
 {
 	// Every instance, as CA_SV_CS_COUNT can grow at runtime
-	for (int i = 0; i < airship_manual_input::kMaxControlSurfaces; i++) {
+	for (int i = 0; i < kControlSurfaceMaxCount; i++) {
 		char name[20];
 		snprintf(name, sizeof(name), "CA_SV_CS%d_TYPE", i);
 		_surface_param_handles[i].type = param_find(name);
@@ -106,9 +106,9 @@ AirshipAttitudeControl::parameters_updated()
 	_yaw_rate_max = math::radians(_param_as_yawrate_max.get());
 	// The surfaces' types and yaw rows are read through the handles found in
 	// the constructor, on a parameter update only
-	const int count = math::constrain((int)_param_ca_sv_cs_count.get(), 0, airship_manual_input::kMaxControlSurfaces);
-	int32_t types[airship_manual_input::kMaxControlSurfaces] {};
-	float yaw_torques[airship_manual_input::kMaxControlSurfaces] {};
+	const int count = math::constrain((int)_param_ca_sv_cs_count.get(), 0, kControlSurfaceMaxCount);
+	int32_t types[kControlSurfaceMaxCount] {};
+	float yaw_torques[kControlSurfaceMaxCount] {};
 
 	for (int i = 0; i < count; i++) {
 		if (_surface_param_handles[i].type != PARAM_INVALID) {

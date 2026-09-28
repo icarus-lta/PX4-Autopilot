@@ -118,12 +118,6 @@ inline bool wrenchPublished(const vehicle_control_mode_s &control_mode)
 	       || control_mode.flag_control_attitude_enabled;
 }
 
-/** CA_AIRFRAME value of the airship allocator, the one whose parameters hasPropulsiveYaw() reads */
-static constexpr int32_t kAirshipAllocator = kCaAirframeAirship;
-
-/** Largest number of control surfaces (CA_SV_CS_COUNT) */
-static constexpr int kMaxControlSurfaces = kControlSurfaceMaxCount;
-
 /**
  * Whether the control surfaces take yaw in the allocator, from their
  * CA_SV_CSn_TYPE and CA_SV_CSn_TRQ_Y: the allocator gives flaps, airbrakes,
@@ -139,7 +133,7 @@ inline bool hasYawSurfaces(int count, const int32_t types[], const float yaw_tor
 {
 	bool any = false;
 
-	for (int i = 0; i < count && i < kMaxControlSurfaces; i++) {
+	for (int i = 0; i < count && i < kControlSurfaceMaxCount; i++) {
 		const auto surface_type = static_cast<ControlSurfaceType>(types[i]);
 
 		if (controlSurfaceTakesTorque(surface_type) && fabsf(yaw_torques[i]) > ActuatorEffectiveness::kMinEffectiveness) {
@@ -182,7 +176,7 @@ inline bool hasYawSurfaces(int count, const int32_t types[], const float yaw_tor
 inline bool hasPropulsiveYaw(int32_t allocator, int32_t pod_grouping, bool tail, bool yaw_surfaces,
 			     float surface_credit)
 {
-	if (allocator != kAirshipAllocator) {
+	if (allocator != kCaAirframeAirship) {
 		return true;
 	}
 
