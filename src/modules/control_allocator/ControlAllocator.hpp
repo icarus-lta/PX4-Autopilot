@@ -42,6 +42,7 @@
 #pragma once
 
 #include <ActuatorEffectiveness.hpp>
+#include <AirshipAirframe.hpp>
 #include <ActuatorEffectivenessMultirotor.hpp>
 #include <ActuatorEffectivenessStandardVTOL.hpp>
 #include <ActuatorEffectivenessTiltrotorVTOL.hpp>
@@ -181,7 +182,7 @@ private:
 		HELICOPTER_COAXIAL = 12,
 		ROVER_MECANUM = 13,
 		SPACECRAFT_2D = 14,
-		AIRSHIP = ActuatorEffectivenessAirship::CA_AIRFRAME_VALUE, // 15 was Spacecraft 3D: removed from this enum, value still reserved in module.yaml
+		AIRSHIP = kCaAirframeAirship, // 15 was Spacecraft 3D: removed from this enum, value still reserved in module.yaml
 	};
 
 	enum class FailureMode {

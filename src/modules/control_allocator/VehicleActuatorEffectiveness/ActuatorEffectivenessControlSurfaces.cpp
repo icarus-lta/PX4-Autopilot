@@ -143,7 +143,7 @@ void ActuatorEffectivenessControlSurfaces::updateParams()
 		param_get(_param_handles[i].scale_spoiler, &_params[i].scale_spoiler);
 
 		// TODO: enforce limits (note that tailsitter uses different limits)?
-		if (!takesTorque(_params[i].type)) {
+		if (!controlSurfaceTakesTorque(_params[i].type)) {
 			torque.setZero();
 		}
 	}
