@@ -48,6 +48,7 @@
 #pragma once
 
 #include "control_allocation/actuator_effectiveness/ActuatorEffectiveness.hpp"
+#include "control_allocation/actuator_effectiveness/AirshipAirframe.hpp"
 #include "ActuatorEffectivenessControlSurfaces.hpp"
 #include "AirshipPod.hpp"
 
@@ -58,6 +59,9 @@
 class ActuatorEffectivenessAirship : public ModuleParams, public ActuatorEffectiveness
 {
 public:
+	/** CA_AIRFRAME value that selects this effectiveness (kCaAirframeAirship) */
+	static constexpr int32_t CA_AIRFRAME_VALUE = kCaAirframeAirship;
+
 	static constexpr int NUM_PODS = 2;
 	enum MotorIndex { STARBOARD = 0, PORT = 1, TAIL = 2 };
 
@@ -76,8 +80,10 @@ public:
 	/**
 	 * No auxiliary controls: takes the allocator's cycle time for the tilt slew
 	 * in updateSetpoint(). Because the flaps/spoiler path is not called, a
-	 * CA_SV_CSn_TYPE of flap or spoiler is inert on an airship: the surface
-	 * still occupies its slot and is still credited whatever the matrix left.
+	 * CA_SV_CSn_TYPE of flap or spoiler (or any type takesTorque() rejects) is
+	 * inert on an airship: the surface still occupies its slot, its torque is
+	 * zero (takesTorque()), so it is credited nothing and its setpoint stays at
+	 * CA_SV_CSn_TRIM; CA_SV_CSn_FLAP and CA_SV_CSn_SPOIL are ignored.
 	 */
 	void allocateAuxilaryControls(const float dt, int matrix_index, ActuatorVector &actuator_sp) override { _dt = dt; }
 
@@ -120,13 +126,14 @@ private:
 	 * the measured noise and an order below the smallest real shortfall the
 	 * tests assert. [normalized torque or thrust]
 	 *
-	 * Applied where a sign is published, and not on the axes a surface
-	 * serves, which publish their magnitude raw. That asymmetry was measured
-	 * rather than assumed: on 2500_generic_airship's shape - fixed mounts, so
-	 * the pod's atan2/cos/sin path carries no rounding at all - a served axis
-	 * publishes exactly zero, and on a tilting airframe with surfaces it
-	 * publishes the demand's own magnitude, three orders above this band.
-	 * Neither lands inside it.
+	 * Applied on every axis, the ones a surface serves included: with the
+	 * yaw rate loop closed on independent pods at a CA_AIRSHIP_CS_K below 1
+	 * they realize the served yaw through the same round trip, and a float32
+	 * replay of that case leaves residuals of order 1e-7 on a few percent of
+	 * the cycles. On the two shapes measured earlier the band never decided:
+	 * fixed mounts (2500_generic_airship) carry no rounding at all, and a
+	 * tilting airframe whose pods cannot realize the served axis reports the
+	 * demand's own magnitude, three orders above it.
 	 */
 	static constexpr float kShortfallDeadband = 1e-4f;
 
@@ -140,9 +147,10 @@ private:
 	 * against the small steady torques the integral exists to remove. Only a
 	 * same-signed share is removed, because the two pods can withhold and
 	 * fall short in opposite directions -- one holding in the steer band
-	 * while the other is floored by the non-reversible clamp. Subtracting the
-	 * whole share would then flip the published sign and drive the integrator
-	 * the wrong way.
+	 * while the other steers and falls short, floored by the non-reversible
+	 * clamp or leaving a perpendicular residual at a range end. Subtracting
+	 * the whole share would then flip the published sign and drive the
+	 * integrator the wrong way.
 	 */
 	float shortfall(float asked, int axis) const;
 
@@ -162,7 +170,7 @@ private:
 	int _first_control_surface_idx{0};
 	int _first_tilt_idx{0};
 	int _num_tilt_servos{0};
-	bool _surface_serves[3] {};	///< torque axes with control-surface effectiveness
+	bool _surface_serves[3] {};	///< torque axes whose matrix row the allocator keeps: a surface entry above kMinEffectiveness
 
 	// What updateSetpoint() leaves for getUnallocatedControl(): the raw
 	// quantities, so the subtraction happens once, where it is published
