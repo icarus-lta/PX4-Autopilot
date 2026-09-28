@@ -252,7 +252,7 @@ make px4_sitl gz_airship_fixed_drag
 
 ### Generic Airship (Added Mass)
 
-The same vehicle with the hull's fluid added mass, which brings the Munk moment, and the tail that was sized against it.
+The same vehicle with the hull's fluid added mass, which brings the Munk moment the tail was sized against.
 No drag.
 
 ```sh
