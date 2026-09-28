@@ -96,8 +96,8 @@ private:
 	 */
 	void parameters_updated();
 
-	void publishThrustSetpoint(const matrix::Vector3f &thrust, const hrt_abstime &timestamp_sample);
-	void publishTorqueSetpoint(const matrix::Vector3f &torque, const hrt_abstime &timestamp_sample);
+	/** Thrust, then torque: the allocator runs on the torque setpoint's callback */
+	void publishWrench(const matrix::Vector3f &thrust, const matrix::Vector3f &torque, const hrt_abstime &timestamp_sample);
 
 	/** The yaw rate the stick commands, with the thrust it is flown at, for logging and telemetry */
 	void publishRatesSetpoint(float yaw_rate_sp, const matrix::Vector3f &thrust);

@@ -125,17 +125,15 @@ AirshipAttitudeControl::parameters_updated()
 			      _param_ca_airship_cs_k.get());
 }
 
-void AirshipAttitudeControl::publishThrustSetpoint(const Vector3f &thrust, const hrt_abstime &timestamp_sample)
+void AirshipAttitudeControl::publishWrench(const Vector3f &thrust, const Vector3f &torque,
+		const hrt_abstime &timestamp_sample)
 {
 	vehicle_thrust_setpoint_s v_thrust_sp{};
 	v_thrust_sp.timestamp = hrt_absolute_time();
 	v_thrust_sp.timestamp_sample = timestamp_sample;
 	thrust.copyTo(v_thrust_sp.xyz);
 	_vehicle_thrust_setpoint_pub.publish(v_thrust_sp);
-}
 
-void AirshipAttitudeControl::publishTorqueSetpoint(const Vector3f &torque, const hrt_abstime &timestamp_sample)
-{
 	vehicle_torque_setpoint_s v_torque_sp{};
 	v_torque_sp.timestamp = hrt_absolute_time();
 	v_torque_sp.timestamp_sample = timestamp_sample;
@@ -204,14 +202,6 @@ AirshipAttitudeControl::Run()
 		const Vector3f thrust = manual_input_usable ? airship_manual_input::thrust(_manual_control_setpoint) : Vector3f{};
 		Vector3f torque = manual_input_usable ? airship_manual_input::torque(_manual_control_setpoint) : Vector3f{};
 
-		// A mode that enables none of manual, rate and attitude control leaves
-		// the wrench to its own publisher, or to nobody
-		const bool wrench_published = airship_manual_input::wrenchPublished(_vehicle_control_mode);
-
-		if (wrench_published) {
-			publishThrustSetpoint(thrust, angular_velocity.timestamp_sample);
-		}
-
 		// Yaw: rate loop where the mode asks for rates, otherwise the stick is the torque
 		const bool yaw_loop_active = airship_manual_input::yawRateLoopActive(_vehicle_control_mode, manual_input_usable,
 					     _has_propulsive_yaw);
@@ -234,8 +224,10 @@ AirshipAttitudeControl::Run()
 			publishRateControlStatus();
 		}
 
-		if (wrench_published) {
-			publishTorqueSetpoint(torque, angular_velocity.timestamp_sample);
+		// A mode that enables none of manual, rate and attitude control leaves
+		// the wrench to its own publisher, or to nobody
+		if (airship_manual_input::wrenchPublished(_vehicle_control_mode)) {
+			publishWrench(thrust, torque, angular_velocity.timestamp_sample);
 		}
 
 		parameter_update_poll();
