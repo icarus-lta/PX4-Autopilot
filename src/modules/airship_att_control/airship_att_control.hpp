@@ -33,8 +33,11 @@
 
 #pragma once
 
+#include "airship_manual_input.hpp"
+#include "airship_yaw_rate_loop.hpp"
+
 #include <lib/matrix/matrix/math.hpp>
-#include <lib/rate_control/rate_control.hpp>
+#include <lib/parameters/param.h>
 #include <px4_platform_common/module.h>
 #include <px4_platform_common/module_params.h>
 #include <uORB/Publication.hpp>
@@ -87,9 +90,9 @@ private:
 	void parameter_update_poll();
 
 	/**
-	 * Push the gains into the rate controller, convert the max rate to rad/s,
-	 * and set _propulsive_yaw from the allocator's parameters, which decides
-	 * whether the yaw rate loop may close (airship_manual_input::propulsiveYaw())
+	 * Push the gains into the yaw rate loop, convert the max rate to rad/s,
+	 * and set _has_propulsive_yaw from the allocator's parameters, which decides
+	 * whether the yaw rate loop may close (airship_manual_input::hasPropulsiveYaw())
 	 */
 	void parameters_updated();
 
@@ -99,19 +102,25 @@ private:
 	/** The yaw rate the stick commands, with the thrust it is flown at, for logging and telemetry */
 	void publishRatesSetpoint(float yaw_rate_sp, const matrix::Vector3f &thrust);
 
-	/**
-	 * Close the yaw rate loop on the stick.
-	 * @return normalized yaw torque
-	 */
-	float controlYawRate(const matrix::Vector3f &rates, float yaw_rate_sp, float dt);
-
-	/** Anti-windup feedback from the control allocator */
+	/** Anti-windup feedback from the control allocator, on a new control_allocator_status only */
 	void updateSaturationStatus();
 
 	/** Integrator state for logging */
 	void publishRateControlStatus();
 
-	RateControl _rate_control; ///< yaw axis only: roll and pitch gains stay zero
+	AirshipYawRateLoop _yaw_rate_loop;
+
+	/**
+	 * CA_SV_CSn_TYPE and CA_SV_CSn_TRQ_Y are indexed parameters: their handles
+	 * are found once, in the constructor, as ActuatorEffectivenessControlSurfaces
+	 * finds its own, and only their values are read on a parameter update
+	 */
+	struct SurfaceParamHandles {
+		param_t type{PARAM_INVALID};
+		param_t yaw_torque{PARAM_INVALID};
+	};
+
+	SurfaceParamHandles _surface_param_handles[airship_manual_input::kMaxControlSurfaces];
 
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	uORB::Subscription _control_allocator_status_sub{ORB_ID(control_allocator_status)};
@@ -130,8 +139,7 @@ private:
 
 	hrt_abstime _last_run{0};
 	float _yaw_rate_max{0.f};		///< AS_YAWRATE_MAX [rad/s]
-	bool _propulsive_yaw{true};	///< propulsiveYaw(): the yaw rate loop may close on this allocator configuration
-	bool _yaw_loop_was_active{false};	///< the yaw rate loop was closed on the previous cycle
+	bool _has_propulsive_yaw{true};	///< hasPropulsiveYaw(): the yaw rate loop may close on this allocator configuration
 
 	perf_counter_t _loop_perf;
 

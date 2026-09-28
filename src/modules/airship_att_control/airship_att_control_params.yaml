@@ -46,10 +46,16 @@ parameters:
           propulsion gets yaw to make. With the airship allocator (CA_AIRFRAME
           Airship) that means independent pods (CA_AIRSHIP_GRP) or a tail thruster
           (CA_AIRSHIP_TAIL), and yaw surfaces, if any, not credited in full
-          (CA_AIRSHIP_CS_K below 1); any other allocator keeps the loop. Where
-          yaw comes from control surfaces alone the stick stays yaw torque and
-          the AS_* yaw parameters do nothing. The stick passes through
-          MAN_DEADZONE first, so the center band commands zero rate.
+          (CA_AIRSHIP_CS_K below 1; the propulsion gets the uncredited share, so
+          a credit close to 1 leaves the loop little authority at rest); any
+          other allocator keeps the loop. Where yaw comes from control surfaces
+          alone the stick stays yaw torque, as the loop has no airspeed scaling,
+          and the AS_* yaw parameters do nothing. By design no parameter forces
+          the loop on or off, as FW_ACRO_YAW_EN does on fixed-wing; it follows
+          the allocator configuration alone. The stick passes through
+          MAN_DEADZONE first, so the center band commands zero rate, unlike
+          multicopter, fixed-wing and rover Acro, which apply no deadzone to the
+          rate stick.
       type: float
       default: 15.0
       unit: deg/s

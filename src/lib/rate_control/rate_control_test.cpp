@@ -42,3 +42,137 @@ TEST(RateControlTest, AllZeroCase)
 	Vector3f torque = rate_control.update(Vector3f(), Vector3f(), Vector3f(), 0.f, false);
 	EXPECT_EQ(torque, Vector3f());
 }
+
+TEST(RateControlTest, ZeroIntegratorLimitDisablesI)
+{
+	// I only, the integrator limit left at its default of zero
+	RateControl rate_control;
+	rate_control.setPidGains(Vector3f(), Vector3f(1.f, 1.f, 1.f), Vector3f());
+	const Vector3f rate_sp(1.f, 1.f, 1.f);
+	rate_ctrl_status_s status{};
+
+	for (int i = 0; i < 10; i++) {
+		rate_control.update(Vector3f(), rate_sp, Vector3f(), 0.01f, false);
+	}
+
+	rate_control.getRateControlStatus(status);
+	EXPECT_FLOAT_EQ(status.yawspeed_integ, 0.f);
+	EXPECT_EQ(rate_control.update(Vector3f(), rate_sp, Vector3f(), 0.01f, false), Vector3f());
+
+	// with a limit the same cycles integrate (about 0.098 with the I factor)
+	rate_control.setIntegratorLimit(Vector3f(1.f, 1.f, 1.f));
+
+	for (int i = 0; i < 10; i++) {
+		rate_control.update(Vector3f(), rate_sp, Vector3f(), 0.01f, false);
+	}
+
+	rate_control.getRateControlStatus(status);
+	EXPECT_GT(status.yawspeed_integ, 0.09f);
+
+	// and an explicit zero limit clamps the integral back to zero
+	rate_control.setIntegratorLimit(Vector3f());
+	rate_control.update(Vector3f(), rate_sp, Vector3f(), 0.01f, false);
+	rate_control.getRateControlStatus(status);
+	EXPECT_FLOAT_EQ(status.yawspeed_integ, 0.f);
+}
+
+TEST(RateControlTest, PositiveSaturationBlocksPositiveIntegrationOnly)
+{
+	RateControl rate_control;
+	rate_control.setPidGains(Vector3f(), Vector3f(1.f, 1.f, 1.f), Vector3f());
+	rate_control.setIntegratorLimit(Vector3f(1.f, 1.f, 1.f));
+	rate_ctrl_status_s status{};
+
+	// yaw saturated positive, set as a whole vector the way mc_rate_control does
+	Vector<bool, 3> positive;
+	Vector<bool, 3> negative;
+	positive(2) = true;
+	rate_control.setSaturationStatus(positive, negative);
+
+	// a positive yaw error does not integrate
+	rate_control.update(Vector3f(), Vector3f(0.f, 0.f, 1.f), Vector3f(), 0.01f, false);
+	rate_control.getRateControlStatus(status);
+	EXPECT_FLOAT_EQ(status.yawspeed_integ, 0.f);
+
+	// a negative one unwinds
+	rate_control.update(Vector3f(), Vector3f(0.f, 0.f, -1.f), Vector3f(), 0.01f, false);
+	rate_control.getRateControlStatus(status);
+	EXPECT_LT(status.yawspeed_integ, 0.f);
+
+	// the other axes carry no flag
+	rate_control.update(Vector3f(), Vector3f(1.f, 1.f, 0.f), Vector3f(), 0.01f, false);
+	rate_control.getRateControlStatus(status);
+	EXPECT_GT(status.rollspeed_integ, 0.f);
+	EXPECT_GT(status.pitchspeed_integ, 0.f);
+}
+
+TEST(RateControlTest, NegativeSaturationBlocksNegativeIntegrationOnly)
+{
+	RateControl rate_control;
+	rate_control.setPidGains(Vector3f(), Vector3f(1.f, 1.f, 1.f), Vector3f());
+	rate_control.setIntegratorLimit(Vector3f(1.f, 1.f, 1.f));
+	rate_ctrl_status_s status{};
+
+	// the per-axis setter writes the same flag
+	rate_control.setNegativeSaturationFlag(2, true);
+
+	// a negative yaw error does not integrate
+	rate_control.update(Vector3f(), Vector3f(0.f, 0.f, -1.f), Vector3f(), 0.01f, false);
+	rate_control.getRateControlStatus(status);
+	EXPECT_FLOAT_EQ(status.yawspeed_integ, 0.f);
+
+	// a positive one unwinds
+	rate_control.update(Vector3f(), Vector3f(0.f, 0.f, 1.f), Vector3f(), 0.01f, false);
+	rate_control.getRateControlStatus(status);
+	EXPECT_GT(status.yawspeed_integ, 0.f);
+}
+
+TEST(RateControlTest, LandedFlagGatesIntegration)
+{
+	RateControl rate_control;
+	rate_control.setPidGains(Vector3f(1.f, 1.f, 1.f), Vector3f(1.f, 1.f, 1.f), Vector3f());
+	rate_control.setIntegratorLimit(Vector3f(1.f, 1.f, 1.f));
+	const Vector3f rate_sp(0.f, 0.f, 1.f);
+	rate_ctrl_status_s status{};
+
+	// landed: P acts, I does not move
+	EXPECT_FLOAT_EQ(rate_control.update(Vector3f(), rate_sp, Vector3f(), 0.01f, true)(2), 1.f);
+	EXPECT_FLOAT_EQ(rate_control.update(Vector3f(), rate_sp, Vector3f(), 0.01f, true)(2), 1.f);
+	rate_control.getRateControlStatus(status);
+	EXPECT_FLOAT_EQ(status.yawspeed_integ, 0.f);
+
+	// not landed: I moves, and the next output carries it
+	rate_control.update(Vector3f(), rate_sp, Vector3f(), 0.01f, false);
+	rate_control.getRateControlStatus(status);
+	EXPECT_GT(status.yawspeed_integ, 0.f);
+	EXPECT_GT(rate_control.update(Vector3f(), rate_sp, Vector3f(), 0.01f, false)(2), 1.f);
+}
+
+TEST(RateControlTest, ResetIntegralClearsStatus)
+{
+	RateControl rate_control;
+	rate_control.setPidGains(Vector3f(), Vector3f(1.f, 1.f, 1.f), Vector3f());
+	rate_control.setIntegratorLimit(Vector3f(1.f, 1.f, 1.f));
+	rate_ctrl_status_s status{};
+
+	rate_control.update(Vector3f(), Vector3f(1.f, 1.f, 1.f), Vector3f(), 0.01f, false);
+	rate_control.getRateControlStatus(status);
+	EXPECT_GT(status.rollspeed_integ, 0.f);
+	EXPECT_GT(status.pitchspeed_integ, 0.f);
+	EXPECT_GT(status.yawspeed_integ, 0.f);
+
+	// one axis
+	rate_control.resetIntegral(2);
+	rate_control.getRateControlStatus(status);
+	EXPECT_GT(status.rollspeed_integ, 0.f);
+	EXPECT_GT(status.pitchspeed_integ, 0.f);
+	EXPECT_FLOAT_EQ(status.yawspeed_integ, 0.f);
+
+	// all axes, and the next output carries no integral
+	rate_control.resetIntegral();
+	rate_control.getRateControlStatus(status);
+	EXPECT_FLOAT_EQ(status.rollspeed_integ, 0.f);
+	EXPECT_FLOAT_EQ(status.pitchspeed_integ, 0.f);
+	EXPECT_FLOAT_EQ(status.yawspeed_integ, 0.f);
+	EXPECT_EQ(rate_control.update(Vector3f(), Vector3f(), Vector3f(), 0.01f, false), Vector3f());
+}
