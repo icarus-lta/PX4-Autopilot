@@ -64,28 +64,37 @@ static control_allocator_status_s unallocated(float roll, float pitch, float yaw
 	return status;
 }
 
-TEST(AirshipYawRateLoopTest, SaturationFlagsFollowTheShortfallSign)
+TEST(AirshipYawRateLoopTest, RollAndPitchShortfallsDoNotStopYaw)
 {
-	const AirshipYawRateLoop::SaturationFlags flags = AirshipYawRateLoop::saturationFlags(unallocated(1.f, -1.f, 0.f));
-	EXPECT_TRUE(flags.positive(0));		// roll short upwards
-	EXPECT_FALSE(flags.negative(0));
-	EXPECT_FALSE(flags.positive(1));
-	EXPECT_TRUE(flags.negative(1));		// pitch short downwards
-	EXPECT_FALSE(flags.positive(2));	// yaw served
-	EXPECT_FALSE(flags.negative(2));
+	// roll and pitch short, yaw served: the allocator's verdict is false but
+	// yaw integrates both ways
+	AirshipYawRateLoop loop = integratorOnly();
+	loop.setSaturation(unallocated(1.f, -1.f, 0.f));
+
+	loop.update(Vector3f(), 1.f, kDt);
+	const float after_positive = yawIntegral(loop);
+	EXPECT_GT(after_positive, 0.f);
+
+	loop.update(Vector3f(), -1.f, kDt);
+	EXPECT_LT(yawIntegral(loop), after_positive);
 }
 
 TEST(AirshipYawRateLoopTest, NoSaturationWhereTheTorqueWasAchieved)
 {
-	// the allocator's own verdict gates the per-axis residuals
-	control_allocator_status_s status = unallocated(1.f, -1.f, 1.f);
+	// the allocator's own verdict gates the yaw residual, in both directions
+	AirshipYawRateLoop loop = integratorOnly();
+	control_allocator_status_s status = unallocated(0.f, 0.f, 1.f);
 	status.torque_setpoint_achieved = true;
-	const AirshipYawRateLoop::SaturationFlags flags = AirshipYawRateLoop::saturationFlags(status);
+	loop.setSaturation(status);
+	loop.update(Vector3f(), 1.f, kDt);
+	EXPECT_GT(yawIntegral(loop), 0.f);
 
-	for (int i = 0; i < 3; i++) {
-		EXPECT_FALSE(flags.positive(i)) << "axis " << i;
-		EXPECT_FALSE(flags.negative(i)) << "axis " << i;
-	}
+	AirshipYawRateLoop negative = integratorOnly();
+	status = unallocated(0.f, 0.f, -1.f);
+	status.torque_setpoint_achieved = true;
+	negative.setSaturation(status);
+	negative.update(Vector3f(), -1.f, kDt);
+	EXPECT_LT(yawIntegral(negative), 0.f);
 }
 
 TEST(AirshipYawRateLoopTest, PositiveShortfallStopsPositiveIntegrationOnly)

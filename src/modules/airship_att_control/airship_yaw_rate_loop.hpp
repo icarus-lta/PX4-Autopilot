@@ -51,34 +51,6 @@
 class AirshipYawRateLoop
 {
 public:
-	/** Per-axis saturation flags for RateControl::setSaturationStatus() */
-	struct SaturationFlags {
-		matrix::Vector<bool, 3> positive;
-		matrix::Vector<bool, 3> negative;
-	};
-
-	/**
-	 * Anti-windup from the allocator, decoded as in mc_rate_control: an axis
-	 * the allocator could not serve stops integrating in that direction.
-	 */
-	static SaturationFlags saturationFlags(const control_allocator_status_s &control_allocator_status)
-	{
-		SaturationFlags flags{};
-
-		if (!control_allocator_status.torque_setpoint_achieved) {
-			for (size_t i = 0; i < 3; i++) {
-				if (control_allocator_status.unallocated_torque[i] > FLT_EPSILON) {
-					flags.positive(i) = true;
-
-				} else if (control_allocator_status.unallocated_torque[i] < -FLT_EPSILON) {
-					flags.negative(i) = true;
-				}
-			}
-		}
-
-		return flags;
-	}
-
 	/**
 	 * Yaw rate gains, integrator limit and feedforward (AS_YAWRATE_P,
 	 * AS_YAWRATE_I, AS_YR_INT_LIM, AS_YAWRATE_FF)
@@ -96,11 +68,17 @@ public:
 		_rate_control.setFeedForwardGain(matrix::Vector3f(0.f, 0.f, feedforward));
 	}
 
-	/** Anti-windup feedback from the control allocator */
+	/**
+	 * Anti-windup from the allocator on the yaw axis, gated on its verdict as
+	 * in mc_rate_control: a yaw shortfall stops integration in its direction.
+	 * Set per axis, as fw_rate_control does: roll and pitch have no gains.
+	 */
 	void setSaturation(const control_allocator_status_s &control_allocator_status)
 	{
-		const SaturationFlags flags = saturationFlags(control_allocator_status);
-		_rate_control.setSaturationStatus(flags.positive, flags.negative);
+		const float yaw_shortfall = control_allocator_status.torque_setpoint_achieved ? 0.f
+					    : control_allocator_status.unallocated_torque[2];
+		_rate_control.setPositiveSaturationFlag(2, yaw_shortfall > FLT_EPSILON);
+		_rate_control.setNegativeSaturationFlag(2, yaw_shortfall < -FLT_EPSILON);
 	}
 
 	/**
