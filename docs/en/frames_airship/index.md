@@ -28,7 +28,8 @@ The outputs are declared in that order: the motors, then the control surfaces, t
 Assign them to outputs and test them in [Actuators](../config/actuators.md) as for any other frame.
 
 The pod propellers are non-reversible.
-The allocator keeps their motor commands non-negative and reverses the thrust only by tilting the pods through their range, so a [CA_R_REV](../advanced_config/parameter_reference.md#CA_R_REV) bit set for `Motor 1` or `Motor 2` has no effect.
+The allocator keeps their motor commands non-negative and reverses the thrust only by tilting the pods through their range.
+Leave the [CA_R_REV](../advanced_config/parameter_reference.md#CA_R_REV) bits of `Motor 1` and `Motor 2` (the **Bidirectional** checkbox in the actuator geometry) cleared: the allocator ignores them, but the output driver still treats such a motor as [bidirectional](../config/actuators.md#bidirectional-motors), so on a PWM output zero thrust is sent as the middle of the output range, about half throttle on a one-way ESC.
 
 The geometry is described by the `CA_AIRSHIP_*` parameters.
 Each airframe sets the ones of its layout; measure the values of your vehicle and set them in the QGroundControl [Parameters](../advanced_config/parameters.md) screen:
@@ -51,7 +52,7 @@ Each airframe sets the ones of its layout; measure the values of your vehicle an
 
 4. [CA_AIRSHIP_TAIL](#CA_AIRSHIP_TAIL): Enable the tail yaw thruster, `Motor 3`.
    It serves the yaw the pods and the control surfaces leave unmet, one unit of motor command per unit of normalised yaw torque; there is no moment-arm parameter.
-   Make it reversible with [CA_R_REV](../advanced_config/parameter_reference.md#CA_R_REV) bit 2 (`Motor 3`), otherwise it can push only one way; the output driver must support reversible motors as well (see [Reversing Motors](../config/actuators.md#reversing-motors)).
+   Make it reversible with [CA_R_REV](../advanced_config/parameter_reference.md#CA_R_REV) bit 2 (`Motor 3`), otherwise it can push only one way; the output driver and the ESC must support reversible motors as well (see [Bidirectional Motors](../config/actuators.md#bidirectional-motors)).
 5. [CA_AIRSHIP_CS_K](#CA_AIRSHIP_CS_K): The fraction of the control-surface torque allocation the allocator trusts to be delivered aerodynamically; the pods and the tail serve the rest of the demand.
    The surfaces themselves are configured as on a fixed-wing vehicle ([Control Surfaces Geometry](../config/actuators.md#control-surfaces-geometry)).
    The credit has no airspeed scaling: at the default of 1 the surfaces serve their axes alone up to their travel, and at rest the allocator credits them torque that still air does not deliver.
