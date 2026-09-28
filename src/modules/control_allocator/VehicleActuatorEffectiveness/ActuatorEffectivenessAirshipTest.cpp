@@ -651,28 +651,6 @@ TEST_F(ActuatorEffectivenessAirshipTest, LateralThrustReportedUnserved)
 	EXPECT_FLOAT_EQ(status.unallocated_thrust[1], -1.f);
 }
 
-TEST_F(ActuatorEffectivenessAirshipTest, CollectiveSingleTiltConfiguration)
-{
-	setCollectiveMode();
-	ActuatorEffectivenessAirship airship(nullptr);
-
-	// One tilt command registers one tilt servo
-	ActuatorEffectiveness::Configuration configuration{};
-	EXPECT_TRUE(airship.getEffectivenessMatrix(configuration, EffectivenessUpdateReason::MOTOR_ACTIVATION_UPDATE));
-	EXPECT_EQ(configuration.num_actuators_matrix[0], 3);
-	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::MOTORS], 2);
-	EXPECT_EQ(configuration.num_actuators[(int)ActuatorType::SERVOS], 1);
-
-	// The tail motor shifts the tilt but does not add servos
-	setTailThruster();
-	ActuatorEffectivenessAirship tail_airship(nullptr);
-	ActuatorEffectiveness::Configuration tail_configuration{};
-	EXPECT_TRUE(tail_airship.getEffectivenessMatrix(tail_configuration, EffectivenessUpdateReason::MOTOR_ACTIVATION_UPDATE));
-	EXPECT_EQ(tail_configuration.num_actuators_matrix[0], 4);
-	EXPECT_EQ(tail_configuration.num_actuators[(int)ActuatorType::MOTORS], 3);
-	EXPECT_EQ(tail_configuration.num_actuators[(int)ActuatorType::SERVOS], 1);
-}
-
 TEST_F(ActuatorEffectivenessAirshipTest, TailServesCollectiveYaw)
 {
 	setCollectiveMode();
@@ -853,6 +831,11 @@ TEST_F(ActuatorEffectivenessAirshipTest, DeclaredLayoutMatchesTheIndexMap)
 	resetAirshipParams();
 	setCollectiveMode();
 	expectDeclaredLayout(false, 0, 1);
+
+	resetAirshipParams();
+	setCollectiveMode();
+	setTailThruster();
+	expectDeclaredLayout(true, 0, 1);
 
 	resetAirshipParams();
 	setCollectiveMode();
