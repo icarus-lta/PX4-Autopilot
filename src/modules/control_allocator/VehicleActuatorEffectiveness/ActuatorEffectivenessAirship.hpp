@@ -145,9 +145,11 @@ private:
 	 * same-signed share is removed, because the two pods can withhold and
 	 * fall short in opposite directions -- one holding in the steer band
 	 * while the other steers and falls short, floored by the non-reversible
-	 * clamp or leaving a perpendicular residual at a range end. Subtracting
-	 * the whole share would then flip the published sign and drive the
-	 * integrator the wrong way.
+	 * clamp or leaving a perpendicular residual at a range end. The residual
+	 * already nets an opposite-signed share, so discounting it too would take
+	 * it off the other pod's real shortfall a second time: a shortfall under
+	 * twice that share would publish no saturation while the rate integrator
+	 * winds against it.
 	 */
 	float shortfall(float asked, int axis) const;
 
