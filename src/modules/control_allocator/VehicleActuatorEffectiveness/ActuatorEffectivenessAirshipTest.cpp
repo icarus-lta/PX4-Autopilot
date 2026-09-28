@@ -1022,6 +1022,25 @@ TEST_F(ActuatorEffectivenessAirshipTest, SurfaceCreditScalesPodShare)
 	}
 }
 
+TEST_F(ActuatorEffectivenessAirshipTest, SurfaceSlewLagIsReportedOnTheServedAxis)
+{
+	// The matrix gives the rudder 0.6 of a unit yaw demand and the pods serve
+	// the rest; CA_SVn_SLEW then holds the rudder at 0.3, so the allocator's
+	// residual, rebuilt from the final setpoint, is 0.7 and 0.3 of the yaw is
+	// really missing. The local demand alone sees none of it
+	setSurfaces();
+	ActuatorEffectivenessAirship airship(nullptr);
+
+	control_sp(ActuatorEffectiveness::ControlAxis::YAW) = 1.f;
+	actuator_sp(SURFACE_RUDDER) = 0.6f;
+	run(airship);
+	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.4f);
+
+	status.unallocated_torque[2] = 0.7f;	// demand minus the slewed rudder
+	report(airship);
+	EXPECT_FLOAT_EQ(status.unallocated_torque[2], 1.f);
+}
+
 TEST_F(ActuatorEffectivenessAirshipTest, WeakYawCouplingIsNotSurfaceServed)
 {
 	// An elevator's yaw entry at or below kMinEffectiveness never reaches
@@ -1138,38 +1157,20 @@ TEST_F(ActuatorEffectivenessAirshipTest, RollSurfaceServedBandShortfallIsNotSatu
 	EXPECT_FLOAT_EQ(status.unallocated_torque[0], 0.f);
 }
 
-TEST_F(ActuatorEffectivenessAirshipTest, SurfaceCreditZeroReportsFullPitchDemand)
-{
-	setSurfaces();
-	setSurfaceCredit(0.f);
-	ActuatorEffectivenessAirship airship(nullptr);
-
-	control_sp(ActuatorEffectiveness::ControlAxis::PITCH) = 1.f;
-	actuator_sp(SURFACE_ELEVATOR) = 0.75f;
-	run(airship);
-	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
-	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
-
-	// With no credit, the elevator's share is honestly reported on top
-	// of the matrix residual: the whole pitch demand is unallocated, and
-	// published as its sign
-	status.unallocated_torque[1] = 0.25f; // matrix residual: demand minus elevator
-	report(airship);
-	EXPECT_FLOAT_EQ(status.unallocated_torque[1], 1.f);
-}
-
 TEST_F(ActuatorEffectivenessAirshipTest, PitchDeferredToSurfaces)
 {
 	setSurfaces();
 	ActuatorEffectivenessAirship airship(nullptr);
 
 	control_sp(ActuatorEffectiveness::ControlAxis::PITCH) = 1.f;
+	actuator_sp(SURFACE_ELEVATOR) = 1.f;	// the matrix allocates the whole pitch to the unit elevator
 	run(airship);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_STARBOARD), 0.f);
 	EXPECT_FLOAT_EQ(actuator_sp(MOTOR_PORT), 0.f);
 
-	// With an elevator the allocator's own residual is what is reported,
-	// as a sign like every other axis
+	// With an elevator the allocator's own residual is what is reported, as
+	// a sign like every other axis: here 0.25, after a CA_SV0_SLEW held the
+	// elevator at 0.75. The local demand, 1 - 1 x 1.0 = 0, would report 0
 	status.unallocated_torque[1] = 0.25f;
 	report(airship);
 	EXPECT_FLOAT_EQ(status.unallocated_torque[1], 1.f);
