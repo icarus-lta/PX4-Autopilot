@@ -101,7 +101,8 @@ AirshipAttitudeControl::parameter_update_poll()
 void
 AirshipAttitudeControl::parameters_updated()
 {
-	_yaw_rate_loop.setGains(_param_as_yawrate_p.get(), _param_as_yawrate_i.get(), _param_as_yr_int_lim.get());
+	_yaw_rate_loop.setGains(_param_as_yawrate_p.get(), _param_as_yawrate_i.get(), _param_as_yr_int_lim.get(),
+				_param_as_yawrate_ff.get());
 	_yaw_rate_max = math::radians(_param_as_yawrate_max.get());
 	// The surfaces' types and yaw rows are read through the handles found in
 	// the constructor, on a parameter update only
@@ -292,14 +293,15 @@ int AirshipAttitudeControl::print_usage(const char *reason)
 This implements the airship attitude and rate controller. Roll, pitch and
 thrust are stick passthrough. In manual modes with rate control (Acro,
 Stabilized, Altitude, Position) the yaw stick commands a yaw rate closed by a
-PI loop whenever armed, on the ground included, where the propulsion gets yaw
-to make (see AS_YAWRATE_MAX); otherwise the yaw stick is passed through as
-torque. The modes without manual control (Hold, Mission, Land, and Offboard
-with position, velocity, acceleration, attitude or rate setpoints) keep the
-sticks: no other module drives the airship there. In a mode with none of
-manual, rate and attitude control the module publishes no thrust or torque
-setpoint: Offboard and external modes that send thrust and torque own those
-topics, and actuator setpoints and Termination run no allocation.
+PI loop with setpoint feedforward whenever armed, on the ground included,
+where the propulsion gets yaw to make (see AS_YAWRATE_MAX); otherwise the yaw
+stick is passed through as torque. The modes without manual control (Hold,
+Mission, Land, and Offboard with position, velocity, acceleration, attitude or
+rate setpoints) keep the sticks: no other module drives the airship there. In
+a mode with none of manual, rate and attitude control the module publishes no
+thrust or torque setpoint: Offboard and external modes that send thrust and
+torque own those topics, and actuator setpoints and Termination run no
+allocation.
 
 )DESCR_STR");
 

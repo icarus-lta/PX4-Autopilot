@@ -85,12 +85,12 @@ param set-default CA_AIRSHIP_TLT_R 120
 
 param set-default CA_R_REV 4
 
-# No gains are set here on purpose: the AS_YAWRATE_* defaults stay. For
-# scale, 4.48 N m of tail yaw against the vehicle's 5.80 kg m^2 is 0.77
-# rad/s^2 per unit of normalized command, 0.46 with the 3.95 kg m^2 of added
-# yaw inertia the complete plant carries. The defaults were tuned on the
-# independently vectored airship's gz model, 54 N m of pod yaw against
-# 78.8 kg m^2, 0.69, before it carried a tail (129 kg m^2 now, 0.42; 321 and
-# 0.17 with its added mass). The 4.48 is 2.3544 N on a 1.902 m lever, the
-# lever being to the ventral fin root where the classic model puts the yaw
-# thruster.
+# No gains are set here on purpose: the AS_YAWRATE_* defaults were tuned
+# against this plant and its complete variant (2517, which adds the
+# feedforward) as well as the independently vectored airship's. For scale,
+# 4.48 N m of tail yaw against the vehicle's 5.80 kg m^2 is 0.77 rad/s^2 per
+# unit of normalized command, 0.46 with the 3.95 kg m^2 of added yaw inertia
+# the complete plant carries; the vectored airship's 54 N m of pod yaw
+# against its 129 kg m^2 is 0.42, 0.17 with its added mass. The 4.48 is
+# 2.3544 N on a 1.902 m lever, the lever being to the ventral fin root where
+# the classic model puts the yaw thruster.

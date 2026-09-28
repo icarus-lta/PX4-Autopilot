@@ -29,10 +29,10 @@ param set-default CA_AIRSHIP_TLMIN -180
 param set-default CA_AIRSHIP_TLMAX 180
 param set-default CA_AIRSHIP_TLT_R 120
 
-# Set THR_MDL_FAC from the measured thrust curve; the AS_YAWRATE_* defaults
-# were tuned in the gz airship_vectored_independent model with THR_MDL_FAC 1,
-# on a hull that meets no air at all and had 79 kg m^2 of yaw inertia (129
-# with the tail it now carries): retune them on the vehicle. The posix 2521
-# to 2527 plants add hull drag, fin lift and added mass, the last of them
-# 192 kg m^2 of yaw inertia on its own, and the defaults were not retuned
-# against any of them
+# Set THR_MDL_FAC from the measured thrust curve, then retune the AS_YAWRATE_*
+# gains on the vehicle. The defaults were tuned in gz with THR_MDL_FAC 1, on
+# this airframe's rigid, fin and complete plants (posix 2520, 2522, 2527) and
+# the Cloudship's rigid and complete ones (2510, 2517). AS_YAWRATE_FF, the
+# yaw torque per rad/s of setpoint that holds a turn against the hull's yaw
+# damping, stays 0 here: posix 2522 and 2527 set theirs from their own
+# damping, and the vehicle's has to be measured

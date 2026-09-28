@@ -87,7 +87,7 @@ Yaw has the rate controller below.
 
 ### Yaw Rate Controller
 
-In the manual modes with rate control, [Acro](../flight_modes_mc/acro.md), Stabilized, Altitude and Position, the yaw stick commands a yaw rate that a PI loop closes on the measured yaw rate.
+In the manual modes with rate control, [Acro](../flight_modes_mc/acro.md), Stabilized, Altitude and Position, the yaw stick commands a yaw rate that a PI loop with setpoint feedforward closes on the measured yaw rate.
 The loop closes while armed with valid manual input, on the ground included, and only where the propulsion gets yaw to make: independent pods (`CA_AIRSHIP_GRP`) or a tail thruster (`CA_AIRSHIP_TAIL`), with the yaw surfaces, if any, not credited in full (`CA_AIRSHIP_CS_K` below 1).
 In Manual mode, in the non-manual modes, and on a frame whose yaw comes from control surfaces alone, the yaw stick is passed through as yaw torque and the `AS_*` parameters do nothing: the loop has no airspeed scaling.
 In a mode that enables none of manual, rate and attitude control, such as [Offboard](../flight_modes/offboard.md) with thrust and torque setpoints, the controller publishes no thrust or torque setpoint, so the offboard setpoints drive the allocator alone.
@@ -111,13 +111,22 @@ Tune in this order:
    Increase the gain if the measured rate does not track the setpoint fast enough, decrease it if the rate overshoots, and repeat until you are satisfied with the tracking.
    :::
 
-4. [AS_YAWRATE_I](#AS_YAWRATE_I): Integral gain, which removes steady yaw disturbances such as wind.
-5. [AS_YR_INT_LIM](#AS_YR_INT_LIM): Integrator limit, in normalised yaw torque.
+4. [AS_YAWRATE_FF](#AS_YAWRATE_FF): Feedforward, the control output per rad/s of yaw rate setpoint.
+   It supplies the torque that holds a turn against the hull's yaw damping.
+   Without it the integrator has to build that torque up during the turn and unwind it afterwards, so a well-damped hull can keep turning for more than ten seconds after the stick is released.
+   To measure it, set the feedforward to 0 and hold a steady turn in Acro mode in calm air until the measured rate reaches the setpoint, which takes tens of seconds on a well-damped hull.
+   The integrator then holds the turn, and `yawspeed_integ` of [RateCtrlStatus](../msg_docs/RateCtrlStatus.md), averaged over one full 360° turn, divided by the turn rate in rad/s is about the value that holds that rate.
+   If `yawspeed_integ` sits at [AS_YR_INT_LIM](#AS_YR_INT_LIM), the integrator cannot hold the turn: measure at a smaller rate, or raise the limit for the measurement.
+   Turning without forward speed, the damping grows faster than linearly with the rate, so a value that holds one rate there overshoots at smaller ones.
+   Leave it at 0 on a hull with little yaw damping.
+5. [AS_YAWRATE_I](#AS_YAWRATE_I): Integral gain, which removes steady yaw disturbances such as wind.
+6. [AS_YR_INT_LIM](#AS_YR_INT_LIM): Integrator limit, in normalised yaw torque.
    The integrator is logged as `yawspeed_integ` of [RateCtrlStatus](../msg_docs/RateCtrlStatus.md), published while the loop is closed and once more when it opens.
    Raise the limit if the integrator sits at it against a steady disturbance; lower it to shorten the settling after large yaw trim changes.
 
-The defaults were tuned on the rigid-hull Gazebo model of the Generic Airship (Independent Vectoring) and were not retuned on its hull-drag, fin and added-mass variants, nor on the Cloudship, whose tail delivers a different yaw torque per unit of command.
-Treat them as a starting point and retune on the vehicle.
+The defaults were tuned on the Gazebo models of the Generic Airship (Independent Vectoring), rigid, with fins and complete, and of the Cloudship, rigid and complete.
+The feedforward is set per model in their airframes: 1.0 on the complete vectored airship, 0.3 on its fin variant and 0.05 on the complete Cloudship; the other models and the flight airframes leave it at 0.
+Treat the values as a starting point and retune on the vehicle.
 
 ### Parameter Overview
 
@@ -133,6 +142,7 @@ Treat them as a starting point and retune on the vehicle.
 | <a id="AS_YAWRATE_P"></a>[AS_YAWRATE_P](../advanced_config/parameter_reference.md#AS_YAWRATE_P)             | Yaw rate proportional gain              | -     |
 | <a id="AS_YAWRATE_I"></a>[AS_YAWRATE_I](../advanced_config/parameter_reference.md#AS_YAWRATE_I)             | Yaw rate integral gain                  | -     |
 | <a id="AS_YR_INT_LIM"></a>[AS_YR_INT_LIM](../advanced_config/parameter_reference.md#AS_YR_INT_LIM)          | Yaw rate integrator limit               | -     |
+| <a id="AS_YAWRATE_FF"></a>[AS_YAWRATE_FF](../advanced_config/parameter_reference.md#AS_YAWRATE_FF)          | Yaw rate feedforward                    | -     |
 
 ## Simulation
 

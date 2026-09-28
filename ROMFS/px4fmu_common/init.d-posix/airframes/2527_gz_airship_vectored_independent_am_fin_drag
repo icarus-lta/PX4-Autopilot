@@ -11,3 +11,9 @@
 PX4_SIM_MODEL=${PX4_SIM_MODEL:=airship_vectored_independent_am_fin_drag}
 
 . ${R}etc/init.d-posix/airframes/2520_gz_airship_vectored_independent
+
+# Hull drag and fin lift damp yaw: a 6.7 deg/s turn takes about 0.1 of
+# normalized yaw torque to hold, 0.9 per rad/s. The feedforward supplies it
+# from the setpoint, so it goes when the stick is released and the loop
+# brakes the turn, instead of holding it while the integrator unwinds
+param set-default AS_YAWRATE_FF 1.0

@@ -11,3 +11,9 @@
 PX4_SIM_MODEL=${PX4_SIM_MODEL:=cloudship_am_fin_drag}
 
 . ${R}etc/init.d-posix/airframes/2510_gz_cloudship
+
+# Hull drag and fin lift damp yaw: a 6.7 deg/s turn takes about 0.016 of
+# normalized yaw torque to hold, 0.14 per rad/s (see 2527). Set lower: the
+# yaw rate already peaks above the command mid-turn in Acro, and more
+# feedforward raises that peak
+param set-default AS_YAWRATE_FF 0.05

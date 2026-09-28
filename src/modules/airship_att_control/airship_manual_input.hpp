@@ -172,7 +172,8 @@ inline bool hasYawSurfaces(int count, const int32_t types[], const float yaw_tor
  * its integrator would wind to AS_YR_INT_LIM with no shortfall reported, since
  * the surfaces do not saturate, and hold that rudder after the stick is
  * released, and in any mode it would cap the normalized yaw torque at
- * AS_YAWRATE_P times AS_YAWRATE_MAX (in rad/s) plus AS_YR_INT_LIM.
+ * AS_YAWRATE_P plus AS_YAWRATE_FF, times AS_YAWRATE_MAX (in rad/s), plus
+ * AS_YR_INT_LIM.
  *
  * Any other allocator keeps the loop: these parameters do not describe its
  * propulsion (the gazebo-classic Cloudship's custom rotor set, a tail rotor

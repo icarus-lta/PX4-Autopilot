@@ -9,7 +9,7 @@ parameters:
         long: Yaw rate proportional gain, i.e. control output for angular speed error
           1 rad/s. Unused where the yaw rate loop stays open (see AS_YAWRATE_MAX).
       type: float
-      default: 0.5
+      default: 0.7
       min: 0.0
       max: 10.0
       decimal: 3
@@ -37,6 +37,23 @@ parameters:
       min: 0.0
       max: 1.0
       decimal: 2
+      increment: 0.01
+    AS_YAWRATE_FF:
+      description:
+        short: Yaw rate feedforward
+        long: Direct feedforward from yaw rate setpoint to yaw torque setpoint, i.e.
+          control output for a yaw rate setpoint of 1 rad/s. Compensates the hull's
+          yaw damping, so the torque that holds a turn comes from the setpoint and
+          goes with it when the stick is released, instead of being built up in
+          the integrator during the turn and unwound after it. Turning without
+          forward speed the damping grows faster than linearly with the yaw rate,
+          so a value that holds one turn rate there overshoots at smaller ones.
+          Unused where the yaw rate loop stays open (see AS_YAWRATE_MAX).
+      type: float
+      default: 0.0
+      min: 0.0
+      max: 10.0
+      decimal: 3
       increment: 0.01
     AS_YAWRATE_MAX:
       description:

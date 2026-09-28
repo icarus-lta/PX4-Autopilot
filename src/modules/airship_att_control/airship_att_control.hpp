@@ -147,6 +147,7 @@ private:
 		(ParamFloat<px4::params::AS_YAWRATE_P>) _param_as_yawrate_p,
 		(ParamFloat<px4::params::AS_YAWRATE_I>) _param_as_yawrate_i,
 		(ParamFloat<px4::params::AS_YR_INT_LIM>) _param_as_yr_int_lim,
+		(ParamFloat<px4::params::AS_YAWRATE_FF>) _param_as_yawrate_ff,
 		(ParamFloat<px4::params::AS_YAWRATE_MAX>) _param_as_yawrate_max,
 		(ParamFloat<px4::params::MAN_DEADZONE>) _param_man_deadzone,
 		(ParamInt<px4::params::CA_AIRFRAME>) _param_ca_airframe,

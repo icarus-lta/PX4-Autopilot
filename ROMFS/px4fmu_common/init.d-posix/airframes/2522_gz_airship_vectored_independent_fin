@@ -11,3 +11,7 @@
 PX4_SIM_MODEL=${PX4_SIM_MODEL:=airship_vectored_independent_fin}
 
 . ${R}etc/init.d-posix/airframes/2520_gz_airship_vectored_independent
+
+# Fin lift damps yaw: a 6.7 deg/s turn takes about 0.044 of normalized yaw
+# torque to hold, 0.38 per rad/s (see 2527)
+param set-default AS_YAWRATE_FF 0.3
