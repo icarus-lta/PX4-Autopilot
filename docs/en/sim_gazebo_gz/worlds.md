@@ -45,9 +45,10 @@ It is not recommended as the low frame rate causes segmentation faults on some f
 
 ## LTA {#lta}
 
-The world the [airships](../sim_gazebo_gz/vehicles.md#airship) fly in. It is the default world plus a [Buoyancy](https://gazebosim.org/api/sim/8/classgz_1_1sim_1_1systems_1_1Buoyancy.html) system at an air density of 1.225 kg/m³.
+The world the [airships](../sim_gazebo_gz/vehicles.md#airship) fly in. It is the default world plus a [Buoyancy](https://gazebosim.org/api/sim/8/classgz_1_1sim_1_1systems_1_1Buoyancy.html) system at an air density of 1.225 kg/m³, without PX4's optical-flow and camera-streaming [plugins](../sim_gazebo_gz/plugins.md).
 
 A lighter-than-air vehicle gets all of its weight support that way, and the Buoyancy system lifts only the links a world names in its `<enable>` list, so an airship spawned into any other world has no lift and falls. Adding an airship to another world means adding the plugin to it and listing the model's spawned name, `<model>_<instance>`.
+Gazebo loads the systems in PX4's [server.config](https://github.com/PX4/PX4-Autopilot/blob/main/src/modules/simulation/gz_bridge/server.config) only into a world that declares none of its own, so adding the plugin to a world that declares none, such as `default`, also means listing that set, as `lta.sdf` does.
 This world lists each airship model's bare name and instances 0 to 3 only.
 The instance is the `px4 -i` number, which is unique across a multi-vehicle run whatever the models, so an airship started with `-i 4` or higher has no lift and falls.
 
