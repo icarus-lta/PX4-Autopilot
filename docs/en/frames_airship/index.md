@@ -56,7 +56,7 @@ Each airframe sets the ones of its layout; measure the values of your vehicle an
 5. [CA_AIRSHIP_CS_K](#CA_AIRSHIP_CS_K): The fraction of the control-surface torque allocation the allocator trusts to be delivered aerodynamically; the pods and the tail serve the rest of the demand.
    The surfaces themselves are configured as on a fixed-wing vehicle ([Control Surfaces Geometry](../config/actuators.md#control-surfaces-geometry)).
    The credit has no airspeed scaling: at the default of 1 the surfaces serve their axes alone up to their travel, and at rest the allocator credits them torque that still air does not deliver.
-   At 0 they still deflect, but the pods serve the whole demand.
+   At 0 they still deflect, but the pods and the tail serve the whole demand.
    With yaw surfaces, the [yaw rate controller](#yaw-rate-controller) closes its loop only below 1.
 
 The three frame configurations set the geometry as follows.
