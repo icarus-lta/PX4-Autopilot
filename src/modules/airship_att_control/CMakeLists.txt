@@ -50,3 +50,4 @@ px4_add_module(
 
 px4_add_unit_gtest(SRC AirshipManualInputTest.cpp LINKLIBS modules__airship_att_control)
 px4_add_unit_gtest(SRC AirshipYawRateLoopTest.cpp LINKLIBS RateControl)
+px4_add_functional_gtest(SRC AirshipAttitudeControlTest.cpp LINKLIBS modules__airship_att_control)
