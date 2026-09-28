@@ -592,7 +592,7 @@ ControlAllocator::update_effectiveness_matrix_if_needed(EffectivenessUpdateReaso
 				bool all_entries_small = true;
 
 				for (int m = 0; m < config.num_actuators_matrix[i]; m++) {
-					if (fabsf(matrix(n, m)) > 0.05f) {
+					if (fabsf(matrix(n, m)) > ActuatorEffectiveness::kMinEffectiveness) {
 						all_entries_small = false;
 					}
 				}

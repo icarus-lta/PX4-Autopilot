@@ -34,6 +34,7 @@
 #pragma once
 
 #include "control_allocation/actuator_effectiveness/ActuatorEffectiveness.hpp"
+#include "control_allocation/actuator_effectiveness/ControlSurfaceType.hpp"
 
 #include <px4_platform_common/module_params.h>
 #include <lib/slew_rate/SlewRate.hpp>
@@ -44,62 +45,12 @@ class ActuatorEffectivenessControlSurfaces : public ModuleParams, public Actuato
 {
 public:
 
-	static constexpr int MAX_COUNT = 8;
+	static constexpr int MAX_COUNT = kControlSurfaceMaxCount;
 
-	enum class Type : int32_t {
-		// This matches with the parameter
-		LeftAileron = 1,
-		RightAileron = 2,
-		Elevator = 3,
-		Rudder = 4,
-		LeftElevon = 5,
-		RightElevon = 6,
-		LeftVTail = 7,
-		RightVTail = 8,
-		LeftFlap = 9,
-		RightFlap = 10,
-		Airbrake = 11,
-		Custom = 12,
-		LeftATail = 13,
-		RightATail = 14,
-		SingleChannelAileron = 15,
-		SteeringWheel = 16,
-		LeftSpoiler = 17,
-		RightSpoiler = 18,
-	};
+	using Type = ControlSurfaceType;
 
-	/**
-	 * Whether a surface of this type gets its TRQ parameters as torque;
-	 * flaps, airbrakes, the steering wheel and spoilers get none.
-	 */
-	static constexpr bool takesTorque(Type surface_type)
-	{
-		switch (surface_type) {
-		case Type::LeftFlap:
-		case Type::RightFlap:
-		case Type::Airbrake:
-		case Type::SteeringWheel:
-		case Type::LeftSpoiler:
-		case Type::RightSpoiler:
-			return false;
-
-		case Type::LeftAileron:
-		case Type::RightAileron:
-		case Type::Elevator:
-		case Type::Rudder:
-		case Type::LeftElevon:
-		case Type::RightElevon:
-		case Type::LeftVTail:
-		case Type::RightVTail:
-		case Type::Custom:
-		case Type::LeftATail:
-		case Type::RightATail:
-		case Type::SingleChannelAileron:
-			break;
-		}
-
-		return true; // also a value outside the enum, such as 0 (not set)
-	}
+	/** Whether a surface of this type gets its TRQ parameters as torque (controlSurfaceTakesTorque()) */
+	static constexpr bool takesTorque(Type surface_type) { return controlSurfaceTakesTorque(surface_type); }
 
 	struct Params {
 		Type type;

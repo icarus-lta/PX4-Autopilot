@@ -33,7 +33,6 @@
 
 #include "ActuatorEffectivenessAirship.hpp"
 
-#include <float.h>
 #include <lib/mathlib/mathlib.h>
 
 using namespace matrix;
@@ -99,16 +98,19 @@ ActuatorEffectivenessAirship::getEffectivenessMatrix(Configuration &configuratio
 		configuration.addActuator(ActuatorType::SERVOS, Vector3f{}, Vector3f{});
 	}
 
-	// Any non-zero entry counts as served here, while the allocator zeroes a
-	// matrix row whose every entry is weak: a surface below that leaves a
-	// residual with no surface term, so the uncredited share added back in
-	// getUnallocatedControl() is off by that torque -- on the reported
-	// magnitude only, never on an actuator output
+	// A surface serves a torque axis when the allocator keeps the axis row.
+	// It zeroes a row whose every entry is at most kMinEffectiveness
+	// (ControlAllocator::update_effectiveness_matrix_if_needed), and the pods
+	// and the tail are declared with zero effectiveness, so a torque row
+	// survives only through a surface entry above that. Below it the
+	// allocator allocates nothing on the axis and its residual carries no
+	// surface term, so getUnallocatedControl() must report from the local
+	// model instead: the same test decides the branch there
 	for (int axis = 0; axis < 3; axis++) {
 		_surface_serves[axis] = false;
 
 		for (int i = 0; i < _control_surfaces.count(); i++) {
-			if (fabsf(_control_surfaces.config(i).torque(axis)) > FLT_EPSILON) {
+			if (fabsf(_control_surfaces.config(i).torque(axis)) > kMinEffectiveness) {
 				_surface_serves[axis] = true;
 			}
 		}
@@ -233,9 +235,11 @@ ActuatorEffectivenessAirship::writeTiltServos(ActuatorVector &actuator_sp, const
 {
 	// Written before the motors so the projection uses the clamped angle the
 	// servo realizes; the generic CA_SVn_SLEW runs after this model, so tilt
-	// slewing belongs to CA_AIRSHIP_TLT_R. The count is the declared layout;
-	// the span check also covers a range updateParams() collapsed without a
-	// redeclaration, where servoSetpoint() would divide by zero
+	// slewing belongs to CA_AIRSHIP_TLT_R. The count is the declared layout.
+	// The span check is defensive: the allocator redeclares after every
+	// parameter update (ControlAllocator::parameters_updated), so it never
+	// decides there; it guards servoSetpoint()'s division by the span if a
+	// caller ever collapses the range without redeclaring
 	if (_num_tilt_servos == 0 || !_pods[STARBOARD].canTilt()) {
 		return;
 	}
@@ -282,22 +286,28 @@ void
 ActuatorEffectivenessAirship::getUnallocatedControl(int matrix_index, control_allocator_status_s &status)
 {
 	// The rate controller gates on torque_setpoint_achieved, then reads only
-	// the sign of each axis. Both branches publish the same quantity -- what
-	// the pods and the tail were asked for, less what they delivered, less the
-	// share they held by choice -- and differ only in where the asked-for
-	// share comes from. On a torque axis a control surface serves it is the
-	// allocator's own residual: that credits the surface in full, so add back
-	// the share CA_AIRSHIP_CS_K left uncredited, and it is rebuilt from the
-	// final actuator setpoint, so it also carries a CA_SVn_SLEW that moved the
-	// surface after this model ran. Those axes publish the magnitude; every
-	// other axis has no surface to disagree about and publishes a sign, as
-	// ActuatorEffectivenessHelicopter does on all of them
+	// the sign of each axis, so every axis publishes a sign, as
+	// ActuatorEffectivenessHelicopter does. Behind it both branches take the
+	// same quantity -- what the pods and the tail were asked for, less what
+	// they delivered, less the share they held by choice -- and differ only
+	// in where the asked-for share comes from. On a torque axis a control
+	// surface serves it is the allocator's own residual: that credits the
+	// surface in full, so add back the share CA_AIRSHIP_CS_K left
+	// uncredited, and it is rebuilt from the final actuator setpoint, so it
+	// also carries a CA_SVn_SLEW that moved the surface after this model
+	// ran. Every other axis has no surface to disagree about and takes the
+	// local demand. Known limitation: a row the pseudo-inverse drops as
+	// dependent on another (ControlAllocationPseudoInverse::dropDependentAxes,
+	// e.g. a lone surface whose yaw entry only repeats its pitch entry) is
+	// zeroed there as a weak row is here, but cannot be seen from this class;
+	// such an axis still counts as served and consumes a residual that
+	// credited the surface nothing, off by that surface's torque
 	const float uncredited = 1.f - _param_ca_airship_cs_k.get();
 
 	for (int axis = 0; axis < 3; axis++) {
 		if (_surface_serves[axis]) {
-			status.unallocated_torque[axis] = shortfall(status.unallocated_torque[axis]
-							  + uncredited * _surface_torque(axis), axis);
+			status.unallocated_torque[axis] = saturationSign(shortfall(status.unallocated_torque[axis]
+							  + uncredited * _surface_torque(axis), axis));
 
 		} else {
 			status.unallocated_torque[axis] = saturationSign(shortfall(_demand(axis), axis));

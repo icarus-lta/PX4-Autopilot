@@ -75,6 +75,17 @@ public:
 	static constexpr int NUM_ACTUATORS = 16;
 	static constexpr int NUM_AXES = 6;
 
+	/**
+	 * Smallest effectiveness that counts as control authority on an axis: the
+	 * allocator zeroes a matrix row whose every entry is at most this, so it
+	 * does not control an axis with only marginal authority at the expense of
+	 * the axes it can control. Anything else that decides whether the
+	 * allocator keeps a row, such as an effectiveness class modelling part of
+	 * the wrench itself or a controller reading the surface configuration,
+	 * must apply the same rule.
+	 */
+	static constexpr float kMinEffectiveness = 0.05f;
+
 	enum ControlAxis {
 		ROLL = 0,
 		PITCH,
