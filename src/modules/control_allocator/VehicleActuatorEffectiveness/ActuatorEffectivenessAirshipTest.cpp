@@ -868,15 +868,14 @@ TEST_F(ActuatorEffectivenessAirshipTest, SettledPodsDoNotReportRoundingAsSaturat
 	// under test is the round trip alone
 	run(airship);
 
-	// The hover-climb point of 4580bb6f3e, where the FLT_EPSILON band it
-	// replaced reported a sign on 5.6 % of small yaw setpoints, first at
-	// 0.0026. Which setpoints carry a residual past FLT_EPSILON is a libm
-	// rounding pattern, so sweep the small-setpoint regime rather than pin
-	// the points that failed that day. Every point is delivered exactly up
-	// to rounding: both pods steer (|demand| ~ 0.6, above kSteerEngage), the
-	// demand (0.05 -/+ yaw, 0.6) never enters the rear cone (its up component
-	// is far above the switch margin) and stays inside the thrust clamp,
-	// which the port pod reaches only at yaw = 0.75
+	// At this hover-climb point a FLT_EPSILON band reported a sign on 5.6 %
+	// of small yaw setpoints, first at 0.0026. Which setpoints carry a
+	// residual past FLT_EPSILON is a libm rounding pattern, so sweep the
+	// small-setpoint regime rather than pin single points. Every point is
+	// delivered exactly up to rounding: both pods steer (|demand| ~ 0.6,
+	// above kSteerEngage), the demand (0.05 -/+ yaw, 0.6) never enters the
+	// rear cone (its up component is far above the switch margin) and stays
+	// inside the thrust clamp, which the port pod reaches only at yaw = 0.75
 	for (int i = 2; i <= 100; i++) {
 		const float yaw_sp = 0.0005f * i;	// 0.001 .. 0.05
 		control_sp(ActuatorEffectiveness::ControlAxis::YAW) = yaw_sp;
