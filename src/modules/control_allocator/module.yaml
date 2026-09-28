@@ -714,9 +714,9 @@ parameters:
                   tail serve the rest of the demand. At 1 the surfaces serve
                   their axes alone up to their travel, and the pods and the
                   tail get only what saturated surfaces cannot deliver. At 0
-                  they still deflect, but the
-                  pods serve the whole demand, which restores yaw
-                  authority in hover, where still-air surfaces produce no
+                  they still deflect, but the pods and the tail serve the
+                  whole demand, so independent pods or a tail thruster keep
+                  yaw authority at rest, where still-air surfaces produce no
                   torque. With yaw surfaces, the airship controller closes
                   its yaw rate loop only below 1, and the pods or the tail
                   then get the uncredited share of what it asks for: close
