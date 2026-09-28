@@ -38,12 +38,15 @@ px4_add_module(
 	SRCS
 		airship_att_control_main.cpp
 		airship_manual_input.hpp
+		airship_yaw_rate_loop.hpp
 	MODULE_CONFIG
 		airship_att_control_params.yaml
 	DEPENDS
+		ActuatorEffectiveness
 		mathlib
 		px4_work_queue
 		RateControl
 	)
 
 px4_add_unit_gtest(SRC AirshipManualInputTest.cpp LINKLIBS modules__airship_att_control)
+px4_add_unit_gtest(SRC AirshipYawRateLoopTest.cpp LINKLIBS RateControl)

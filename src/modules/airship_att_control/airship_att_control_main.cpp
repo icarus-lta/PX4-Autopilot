@@ -42,7 +42,6 @@
 
 #include "airship_manual_input.hpp"
 
-#include <float.h>
 #include <lib/mathlib/mathlib.h>
 #include <px4_platform_common/defines.h>
 
@@ -55,6 +54,15 @@ AirshipAttitudeControl::AirshipAttitudeControl() :
 	WorkItem(MODULE_NAME, px4::wq_configurations::rate_ctrl),
 	_loop_perf(perf_alloc(PC_ELAPSED, "airship_att_control"))
 {
+	// Every instance, as CA_SV_CS_COUNT can grow at runtime
+	for (int i = 0; i < airship_manual_input::kMaxControlSurfaces; i++) {
+		char name[20];
+		snprintf(name, sizeof(name), "CA_SV_CS%d_TYPE", i);
+		_surface_param_handles[i].type = param_find(name);
+		snprintf(name, sizeof(name), "CA_SV_CS%d_TRQ_Y", i);
+		_surface_param_handles[i].yaw_torque = param_find(name);
+	}
+
 	_rate_ctrl_status_pub.advertise();
 	parameters_updated();
 }
@@ -93,30 +101,27 @@ AirshipAttitudeControl::parameter_update_poll()
 void
 AirshipAttitudeControl::parameters_updated()
 {
-	// Yaw axis only: roll and pitch stay stick passthrough, their gains are zero
-	_rate_control.setPidGains(Vector3f(0.f, 0.f, _param_as_yawrate_p.get()),
-				  Vector3f(0.f, 0.f, _param_as_yawrate_i.get()), Vector3f());
-	// The library integrator limit defaults to zero, which would silently
-	// disable the I term
-	_rate_control.setIntegratorLimit(Vector3f(0.f, 0.f, _param_as_yr_int_lim.get()));
+	_yaw_rate_loop.setGains(_param_as_yawrate_p.get(), _param_as_yawrate_i.get(), _param_as_yr_int_lim.get());
 	_yaw_rate_max = math::radians(_param_as_yawrate_max.get());
-	// The surfaces' types and yaw rows are indexed parameters, so they are
-	// looked up here, on a parameter update only
+	// The surfaces' types and yaw rows are read through the handles found in
+	// the constructor, on a parameter update only
 	const int count = math::constrain((int)_param_ca_sv_cs_count.get(), 0, airship_manual_input::kMaxControlSurfaces);
 	int32_t types[airship_manual_input::kMaxControlSurfaces] {};
 	float yaw_torques[airship_manual_input::kMaxControlSurfaces] {};
 
 	for (int i = 0; i < count; i++) {
-		char name[20];
-		snprintf(name, sizeof(name), "CA_SV_CS%d_TYPE", i);
-		param_get(param_find(name), &types[i]);
-		snprintf(name, sizeof(name), "CA_SV_CS%d_TRQ_Y", i);
-		param_get(param_find(name), &yaw_torques[i]);
+		if (_surface_param_handles[i].type != PARAM_INVALID) {
+			param_get(_surface_param_handles[i].type, &types[i]);
+		}
+
+		if (_surface_param_handles[i].yaw_torque != PARAM_INVALID) {
+			param_get(_surface_param_handles[i].yaw_torque, &yaw_torques[i]);
+		}
 	}
 
-	_propulsive_yaw = airship_manual_input::propulsiveYaw(_param_ca_airframe.get(), _param_ca_airship_grp.get(),
-			  _param_ca_airship_tail.get(), airship_manual_input::yawSurfaces(count, types, yaw_torques),
-			  _param_ca_airship_cs_k.get());
+	_has_propulsive_yaw = airship_manual_input::hasPropulsiveYaw(_param_ca_airframe.get(), _param_ca_airship_grp.get(),
+			      _param_ca_airship_tail.get(), airship_manual_input::hasYawSurfaces(count, types, yaw_torques),
+			      _param_ca_airship_cs_k.get());
 }
 
 void AirshipAttitudeControl::publishThrustSetpoint(const Vector3f &thrust, const hrt_abstime &timestamp_sample)
@@ -149,47 +154,20 @@ void AirshipAttitudeControl::publishRatesSetpoint(const float yaw_rate_sp, const
 	_vehicle_rates_setpoint_pub.publish(rates_sp);
 }
 
-float AirshipAttitudeControl::controlYawRate(const Vector3f &rates, const float yaw_rate_sp, const float dt)
-{
-	// No D term, so no angular acceleration (0 * NaN would poison the torque).
-	// landed = false: AirshipLandDetector reports landed only when disarmed or
-	// in AUTO_LAND, and neither passes yawRateLoopActive; windup while armed
-	// on the ground is not handled yet.
-	const Vector3f torque = _rate_control.update(rates, Vector3f(0.f, 0.f, yaw_rate_sp), Vector3f{}, dt, false);
-
-	return PX4_ISFINITE(torque(2)) ? torque(2) : 0.f;
-}
-
 void AirshipAttitudeControl::publishRateControlStatus()
 {
 	rate_ctrl_status_s rate_ctrl_status{};
-	_rate_control.getRateControlStatus(rate_ctrl_status);
+	_yaw_rate_loop.getStatus(rate_ctrl_status);
 	rate_ctrl_status.timestamp = hrt_absolute_time();
 	_rate_ctrl_status_pub.publish(rate_ctrl_status);
 }
 
 void AirshipAttitudeControl::updateSaturationStatus()
 {
-	// Anti-windup from the allocator, wired as in mc_rate_control: an axis
-	// the allocator could not serve stops integrating in that direction.
 	control_allocator_status_s control_allocator_status;
 
 	if (_control_allocator_status_sub.update(&control_allocator_status)) {
-		Vector<bool, 3> saturation_positive;
-		Vector<bool, 3> saturation_negative;
-
-		if (!control_allocator_status.torque_setpoint_achieved) {
-			for (size_t i = 0; i < 3; i++) {
-				if (control_allocator_status.unallocated_torque[i] > FLT_EPSILON) {
-					saturation_positive(i) = true;
-
-				} else if (control_allocator_status.unallocated_torque[i] < -FLT_EPSILON) {
-					saturation_negative(i) = true;
-				}
-			}
-		}
-
-		_rate_control.setSaturationStatus(saturation_positive, saturation_negative);
+		_yaw_rate_loop.setSaturation(control_allocator_status);
 	}
 }
 
@@ -225,17 +203,23 @@ AirshipAttitudeControl::Run()
 		const Vector3f thrust = manual_input_usable ? airship_manual_input::thrust(_manual_control_setpoint) : Vector3f{};
 		Vector3f torque = manual_input_usable ? airship_manual_input::torque(_manual_control_setpoint) : Vector3f{};
 
-		publishThrustSetpoint(thrust, angular_velocity.timestamp_sample);
+		// A mode that enables none of manual, rate and attitude control leaves
+		// the wrench to its own publisher, or to nobody
+		const bool wrench_published = airship_manual_input::wrenchPublished(_vehicle_control_mode);
+
+		if (wrench_published) {
+			publishThrustSetpoint(thrust, angular_velocity.timestamp_sample);
+		}
 
 		// Yaw: rate loop where the mode asks for rates, otherwise the stick is the torque
 		const bool yaw_loop_active = airship_manual_input::yawRateLoopActive(_vehicle_control_mode, manual_input_usable,
-					     _propulsive_yaw);
+					     _has_propulsive_yaw);
 
 		if (yaw_loop_active) {
 			updateSaturationStatus();
 			const float yaw_rate_sp = airship_manual_input::yawRateSetpoint(_manual_control_setpoint.yaw,
 						  _param_man_deadzone.get(), _yaw_rate_max);
-			torque(2) = controlYawRate(Vector3f{angular_velocity.xyz}, yaw_rate_sp, dt);
+			torque(2) = _yaw_rate_loop.update(Vector3f{angular_velocity.xyz}, yaw_rate_sp, dt);
 
 			if (new_sticks) {
 				publishRatesSetpoint(yaw_rate_sp, thrust);
@@ -243,16 +227,15 @@ AirshipAttitudeControl::Run()
 
 			publishRateControlStatus();
 
-		} else if (_yaw_loop_was_active) {
-			// The loop just opened: clear the integrator (it only moves while the
-			// loop is closed) and publish once so the status does not read as frozen
-			_rate_control.resetIntegral();
+		} else if (_yaw_rate_loop.open()) {
+			// The loop just opened and cleared its integrator: publish once so
+			// the status does not read as frozen
 			publishRateControlStatus();
 		}
 
-		_yaw_loop_was_active = yaw_loop_active;
-
-		publishTorqueSetpoint(torque, angular_velocity.timestamp_sample);
+		if (wrench_published) {
+			publishTorqueSetpoint(torque, angular_velocity.timestamp_sample);
+		}
 
 		parameter_update_poll();
 	}
@@ -309,20 +292,14 @@ int AirshipAttitudeControl::print_usage(const char *reason)
 This implements the airship attitude and rate controller. Roll, pitch and
 thrust are stick passthrough. In manual modes with rate control (Acro,
 Stabilized, Altitude, Position) the yaw stick commands a yaw rate closed by a
-PI loop whenever armed, on the ground included, provided the propulsion gets
-yaw to make. That is read from the airship allocator's configuration
-(CA_AIRFRAME Airship) alone: independent pods (CA_AIRSHIP_GRP) or a tail
-thruster (CA_AIRSHIP_TAIL), and yaw surfaces, if any, not credited in full
-(CA_AIRSHIP_CS_K below 1; the propulsion gets the uncredited share, so a
-credit close to 1 leaves the loop little authority at rest). Any other
-allocator keeps the loop. In Manual, in the non-manual modes (Hold, Mission,
-Land, Offboard: no other module drives the airship there), and on an airship
-allocator whose yaw comes from control surfaces alone, such as the generic
-airship's collective pods with rudders, the yaw stick is passed through as
-torque: the loop has no airspeed scaling.
-
-### Implementation
-To reduce control latency, the module directly polls on the gyro topic published by the IMU driver.
+PI loop whenever armed, on the ground included, where the propulsion gets yaw
+to make (see AS_YAWRATE_MAX); otherwise the yaw stick is passed through as
+torque. The modes without manual control (Hold, Mission, Land, and Offboard
+with position, velocity, acceleration, attitude or rate setpoints) keep the
+sticks: no other module drives the airship there. In a mode with none of
+manual, rate and attitude control the module publishes no thrust or torque
+setpoint: Offboard and external modes that send thrust and torque own those
+topics, and actuator setpoints and Termination run no allocation.
 
 )DESCR_STR");
 
