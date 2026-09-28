@@ -120,7 +120,7 @@ private:
 		param_t yaw_torque{PARAM_INVALID};
 	};
 
-	SurfaceParamHandles _surface_param_handles[airship_manual_input::kMaxControlSurfaces];
+	SurfaceParamHandles _surface_param_handles[kControlSurfaceMaxCount];
 
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	uORB::Subscription _control_allocator_status_sub{ORB_ID(control_allocator_status)};
