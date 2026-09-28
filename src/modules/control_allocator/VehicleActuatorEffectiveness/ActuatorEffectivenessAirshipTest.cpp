@@ -98,9 +98,11 @@ static void resetAirshipParams(float tilt_min_deg = -180.f, float tilt_max_deg =
 	// Disable autosaving parameters to avoid busy loop in param_set()
 	param_control_autosave(false);
 
-	// Start every test from the parameter defaults so nothing leaks between
-	// tests: independent grouping over the full tilt range, no tail, no
-	// surfaces, full surface credit, no tilt slew
+	// Reset every parameter to its default so nothing leaks between tests
+	// (no tail, no surfaces, full surface credit, no tilt slew), then set
+	// the baseline the tests assume instead of the defaults: independent
+	// grouping (default collective) over the full tilt range, or the one
+	// passed (default a fixed mount)
 	param_reset_all();
 
 	int32_t grouping = 1;
@@ -183,6 +185,13 @@ struct ScopedDisarm {
 	~ScopedDisarm() { publishArmed(true); }
 };
 
+// A parent that drives a parameter update the way the allocator does: a
+// notification on the parent cascades to every ModuleParams child
+struct ParamOwner : ModuleParams {
+	ParamOwner() : ModuleParams(nullptr) {}
+	using ModuleParams::updateParams;
+};
+
 // The actuator layout is decided when the actuators are declared, so every
 // updateSetpoint() needs a preceding declaration, as in the allocator
 static ActuatorEffectiveness::Configuration declareActuators(ActuatorEffectivenessAirship &airship)
@@ -230,18 +239,18 @@ static void runUpdateSetpoint(ActuatorEffectivenessAirship &airship, const Vecto
 	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
 }
 
-// Every test starts from the parameter defaults and the armed state; the
-// setpoints, the actuator vector and the status the report reads are members,
-// so a test writes only what it is about. The airship itself stays a local
-// built after the test's own parameter setters, as the allocator builds it
-// after reading them
+// Every test starts from the resetAirshipParams() baseline and the armed
+// state; the setpoints, the actuator vector and the status the report reads
+// are members, so a test writes only what it is about. The airship itself
+// stays a local built after the test's own parameter setters, as the
+// allocator builds it after reading them
 class ActuatorEffectivenessAirshipTest : public ::testing::Test
 {
 public:
 	void SetUp() override { resetAirshipParams(); }
 
 protected:
-	/** Narrow or collapse the tilt range of the airship the test builds next */
+	/** Narrow or collapse the tilt range, read by the next airship built or the next updateParams() */
 	static void setTiltRange(float tilt_min_deg, float tilt_max_deg)
 	{
 		param_set(param_find("CA_AIRSHIP_TLMIN"), &tilt_min_deg);
@@ -1274,12 +1283,7 @@ TEST_F(ActuatorEffectivenessAirshipTest, CloudshipMirrorSymmetricTilt)
 
 TEST_F(ActuatorEffectivenessAirshipTest, TiltRangeNarrowedAtRuntimeReclampsHeldTilt)
 {
-	// Drive the parameter update the way the allocator does: a notification on
-	// the parent cascades to every ModuleParams child
-	struct ParamOwner : ModuleParams {
-		ParamOwner() : ModuleParams(nullptr) {}
-		using ModuleParams::updateParams;
-	} owner;
+	ParamOwner owner;
 	ActuatorEffectivenessAirship airship{&owner};
 
 	// Commit to the +180 deg end with the full default range
@@ -1291,9 +1295,7 @@ TEST_F(ActuatorEffectivenessAirshipTest, TiltRangeNarrowedAtRuntimeReclampsHeldT
 	// 180 deg state must be pulled into the new range, so a demand below
 	// the steering threshold projects onto 0 deg, not onto a stale angle
 	// no servo write-back can correct (no tilt servo exists any more)
-	float zero = 0.f;
-	param_set(param_find("CA_AIRSHIP_TLMIN"), &zero);
-	param_set(param_find("CA_AIRSHIP_TLMAX"), &zero);
+	setTiltRange(0.f, 0.f);
 	owner.updateParams();
 
 	const float below_release = 0.5f * AirshipPod::kSteerRelease;
@@ -1310,10 +1312,7 @@ TEST_F(ActuatorEffectivenessAirshipTest, CollapsedRangeWithoutRedeclarationLeave
 	// still declared. writeTiltServos() guards that order anyway: with the
 	// span at zero its servo mapping would divide by zero, and the NaN would
 	// go out on the tilt slots and, read back into the pods, on the motors
-	struct ParamOwner : ModuleParams {
-		ParamOwner() : ModuleParams(nullptr) {}
-		using ModuleParams::updateParams;
-	} owner;
+	ParamOwner owner;
 	ActuatorEffectivenessAirship airship{&owner};
 
 	// The limits of the tilting layout, and one declared step that writes
@@ -1327,9 +1326,7 @@ TEST_F(ActuatorEffectivenessAirshipTest, CollapsedRangeWithoutRedeclarationLeave
 	EXPECT_FLOAT_EQ(actuator_sp(TILT_PORT), 1.f);
 
 	// Collapse the range and step again WITHOUT redeclaring
-	float zero = 0.f;
-	param_set(param_find("CA_AIRSHIP_TLMIN"), &zero);
-	param_set(param_find("CA_AIRSHIP_TLMAX"), &zero);
+	setTiltRange(0.f, 0.f);
 	owner.updateParams();
 	airship.allocateAuxilaryControls(kDt, 0, actuator_sp);
 	airship.updateSetpoint(control_sp, 0, actuator_sp, actuator_min, actuator_max);
