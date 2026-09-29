@@ -59,7 +59,7 @@ TEST(AirshipPodTest, SteerEngagesAboveTheFloor)
 	AirshipPod full = pod(-180.f, 180.f);
 
 	// Below the engage floor the direction is undefined: the tilt stays level
-	full.steer(force(0.019f, 0.f), kDt);
+	full.steer(force(0.f, 0.019f), kDt);
 	EXPECT_FLOAT_EQ(full.tilt(), 0.f);
 
 	full.steer(force(0.f, 0.021f), kDt);
