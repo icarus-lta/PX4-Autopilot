@@ -74,8 +74,8 @@ param set-default SIM_GZ_SV_MAXA1 90
 # Collective thrust on one tilt, with the tail taking the yaw the thrusters
 # cannot. The tilt range matches the flight airframe's, which says in its own
 # comment that it is assumed and not measured on the vehicle; the
-# gazebo-classic model drives its rod to +-135 instead, and with the opposite
-# sign. Nobody here has the vehicle's number, so the two sides at least agree.
+# gazebo-classic model drives its rod to +-135 instead, in the same direction.
+# Nobody here has the vehicle's number, so the two sides at least agree.
 param set-default CA_AIRFRAME 16
 param set-default CA_AIRSHIP_GRP 0
 param set-default CA_AIRSHIP_TAIL 1
