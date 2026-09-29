@@ -111,13 +111,8 @@ AirshipAttitudeControl::parameters_updated()
 	float yaw_torques[kControlSurfaceMaxCount] {};
 
 	for (int i = 0; i < count; i++) {
-		if (_surface_param_handles[i].type != PARAM_INVALID) {
-			param_get(_surface_param_handles[i].type, &types[i]);
-		}
-
-		if (_surface_param_handles[i].yaw_torque != PARAM_INVALID) {
-			param_get(_surface_param_handles[i].yaw_torque, &yaw_torques[i]);
-		}
+		param_get(_surface_param_handles[i].type, &types[i]);
+		param_get(_surface_param_handles[i].yaw_torque, &yaw_torques[i]);
 	}
 
 	_has_propulsive_yaw = airship_manual_input::hasPropulsiveYaw(_param_ca_airframe.get(), _param_ca_airship_grp.get(),
