@@ -52,6 +52,7 @@ struct Sticks {
 	float pitch{0.f};
 	float yaw{0.f};
 	float throttle{-1.f};
+	bool valid{true};
 };
 
 static void setInt(const char *name, int32_t value) { param_set(param_find(name), &value); }
@@ -119,7 +120,7 @@ protected:
 		if (publish_sticks) {
 			manual_control_setpoint_s setpoint{};
 			setpoint.timestamp = hrt_absolute_time();
-			setpoint.valid = true;
+			setpoint.valid = sticks.valid;
 			setpoint.roll = sticks.roll;
 			setpoint.pitch = sticks.pitch;
 			setpoint.yaw = sticks.yaw;
@@ -144,6 +145,22 @@ protected:
 		_rates_sub.update();
 		rate_ctrl_status_s status{};
 		_status_sub.update(&status);
+	}
+
+	/** The wrench published as zero and the yaw loop left open: no rate setpoint, no loop status */
+	void expectZeroWrench(const char *when)
+	{
+		SCOPED_TRACE(when);
+		ASSERT_TRUE(_torque_sub.update());
+		ASSERT_TRUE(_thrust_sub.update());
+
+		for (int i = 0; i < 3; i++) {
+			EXPECT_FLOAT_EQ(_torque_sub.get().xyz[i], 0.f) << "axis " << i;
+			EXPECT_FLOAT_EQ(_thrust_sub.get().xyz[i], 0.f) << "axis " << i;
+		}
+
+		EXPECT_FALSE(_rates_sub.updated());
+		EXPECT_FALSE(_status_sub.updated());
 	}
 
 	uORB::Publication<vehicle_control_mode_s> _mode_pub{ORB_ID(vehicle_control_mode)};
@@ -283,26 +300,31 @@ TEST_F(AirshipAttitudeControlTest, YawRuddersAtFullCreditKeepTheStick)
 	EXPECT_FLOAT_EQ(_torque_sub.get().xyz[2], 1.f);
 }
 
-TEST_F(AirshipAttitudeControlTest, DisarmedPublishesZeroWrench)
+TEST_F(AirshipAttitudeControlTest, UnusableSticksPublishZeroWrenchInAcro)
 {
+	setIndependentPods();
 	start();
 
-	vehicle_control_mode_s disarmed = manual();
-	disarmed.flag_armed = false;
+	// Acro on propulsive yaw: disarmed or with the sticks lost the yaw loop
+	// stays open, so nothing overwrites the zeroed wrench
 	Sticks sticks;
 	sticks.roll = 0.5f;
 	sticks.pitch = 0.5f;
 	sticks.yaw = 0.5f;
 	sticks.throttle = 0.5f;
+
+	vehicle_control_mode_s disarmed = acro();
+	disarmed.flag_armed = false;
 	cycle(disarmed, sticks);
+	expectZeroWrench("disarmed");
 
-	ASSERT_TRUE(_torque_sub.update());
-	ASSERT_TRUE(_thrust_sub.update());
+	// A lost link: manual_control publishes its last setpoint once, not valid
+	sticks.valid = false;
+	cycle(acro(), sticks);
+	expectZeroWrench("sticks lost");
 
-	for (int i = 0; i < 3; i++) {
-		EXPECT_FLOAT_EQ(_torque_sub.get().xyz[i], 0.f) << "axis " << i;
-		EXPECT_FLOAT_EQ(_thrust_sub.get().xyz[i], 0.f) << "axis " << i;
-	}
+	cycle(acro(), sticks, false);
+	expectZeroWrench("sticks lost, no new sample");
 }
 
 TEST_F(AirshipAttitudeControlTest, RatesSetpointOnlyOnNewSticks)
